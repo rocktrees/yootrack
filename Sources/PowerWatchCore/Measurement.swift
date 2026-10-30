@@ -77,7 +77,7 @@ public final class MeasurementEngine {
         }
         if !validTime { issue = old == nil ? "Collecting the first measurement interval." : "Sampling gap; measurement baselines restarted." }
         return UsageInterval(start: validTime ? old!.timestamp : sample.timestamp, end: sample.timestamp, seconds: validTime ? dt : 0,
-                             processes: usage, batteryJoules: batteryJoules, batteryLossPoints: loss, attributionValid: validAttribution, issue: issue)
+                             processes: usage, batteryJoules: batteryJoules, batteryLossPoints: loss, attributionValid: validAttribution, issue: issue, batterySnapshot: sample.battery)
     }
     public static func delta(_ current: UInt64?, _ previous: UInt64?) -> Double? {
         guard let current, let previous, current >= previous else { return nil }; return Double(current - previous)

@@ -34,7 +34,7 @@ import PowerWatchCore
             batteryJoules: 100, batteryLossPoints: 1, validBatteryJoules: 100, monitoredSeconds: 60, attributionSeconds: 60, availableSince: now.addingTimeInterval(-3600))
         model.selectedHistory = model.history
         model.providers = [
-            ProviderStatus(id: "cursor", name: "Cursor", plan: "Pro", source: "Fixture", windows: [QuotaWindow(id: "requests", label: "Requests", used: 120, limit: 500, unit: "requests", resetAt: now.addingTimeInterval(3600))], tokens: [], monthCostUSD: nil, budgetUSD: nil, updatedAt: now, error: nil),
+            ProviderStatus(id: "cursor", name: "Cursor", plan: "Pro", source: "Fixture", windows: [QuotaWindow(id: "inhouse", label: "In-house", used: 64, limit: 100, unit: "%", resetAt: now.addingTimeInterval(3600)), QuotaWindow(id: "thirdparty", label: "3rd party", used: 100, limit: 100, unit: "%", resetAt: now.addingTimeInterval(3600))], tokens: [], monthCostUSD: nil, budgetUSD: nil, updatedAt: now, error: nil),
             ProviderStatus(id: "anthropic", name: "Anthropic", plan: nil, source: "Fixture", windows: [QuotaWindow(id: "five_hour", label: "5-hour session", used: 25, limit: 100, unit: "%", resetAt: now.addingTimeInterval(7200))], tokens: [], monthCostUSD: nil, budgetUSD: nil, updatedAt: now, error: nil),
             ProviderStatus(id: "openai", name: "OpenAI", plan: nil, source: "Fixture", windows: [QuotaWindow(id: "budget", label: "Monthly budget", used: 12, limit: 40, unit: "USD", resetAt: nil)], tokens: [], monthCostUSD: 12, budgetUSD: 40, updatedAt: now, error: nil)
         ]

@@ -81,6 +81,78 @@ final class HistoryTests: XCTestCase {
         XCTAssertEqual(members.rows[0].joules, 15, accuracy: 0.001)
         XCTAssertEqual(members.rows[0].averageWatts, 1, accuracy: 0.001)
     }
+    func testBatteryAndImpactHistorySurviveCompactionAndClear() throws {
+        let store = try HistoryStore(url: directory.appendingPathComponent("history.sqlite"))
+        let start = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970 / 300) * 300)
+        var first = interval(at: start)
+        first.processes[0].reading.energyImpact = 10
+        first.batterySnapshot = BatteryReading(percentage: 80, onBattery: true, charging: false, dischargeWatts: 12)
+        var second = interval(at: start.addingTimeInterval(15))
+        second.processes[0].reading.energyImpact = 30
+        second.batterySnapshot = BatteryReading(percentage: 81, onBattery: false, charging: true, dischargeWatts: nil)
+        try store.record(first); try store.record(second)
+        var result = try store.summary(from: start, to: start.addingTimeInterval(30))
+        XCTAssertEqual(result.rows.first?.averageImpact ?? -1, 20, accuracy: 0.001)
+        XCTAssertEqual(result.batteryPoints.count, 2)
+        XCTAssertFalse(result.batteryPoints[0].charging); XCTAssertTrue(result.batteryPoints[1].charging)
+        try store.maintain(now: start.addingTimeInterval(2 * 86400))
+        try store.maintain(now: start.addingTimeInterval(2 * 86400))
+        result = try store.summary(from: start, to: start.addingTimeInterval(30))
+        XCTAssertEqual(result.rows.first?.averageImpact ?? -1, 20, accuracy: 0.001)
+        XCTAssertEqual(result.batteryPoints.count, 1)
+        XCTAssertEqual(result.batteryPoints[0].percentage, 80.5, accuracy: 0.001)
+        XCTAssertTrue(result.batteryPoints[0].charging)
+        try store.clear()
+        result = try store.summary(from: start, to: start.addingTimeInterval(30))
+        XCTAssertTrue(result.batteryPoints.isEmpty); XCTAssertTrue(result.rows.isEmpty)
+    }
+    func testImpactOnlyRowsDoNotInventProcessorEnergyOrBatteryShare() throws {
+        let store = try HistoryStore(url: directory.appendingPathComponent("history.sqlite"))
+        let start = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970 / 15) * 15)
+        var value = interval(at: start)
+        value.processes[0].joules = nil; value.processes[0].reading.energyImpact = 7
+        try store.record(value)
+        let result = try store.summary(from: start, to: start.addingTimeInterval(15))
+        XCTAssertEqual(result.rows.count, 1)
+        XCTAssertEqual(result.rows[0].averageImpact, 7)
+        XCTAssertFalse(result.rows[0].energyAvailable); XCTAssertNil(result.rows[0].shareOfDrain)
+        let member = try store.summary(from: start, to: start.addingTimeInterval(15), membersOf: "example")
+        XCTAssertEqual(member.rows.first?.averageImpact, 7)
+    }
+    func testGroupedImpactSumsProcessesAndAveragesAvailableIntervals() throws {
+        let store = try HistoryStore(url: directory.appendingPathComponent("history.sqlite"))
+        let start = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970 / 15) * 15)
+        var first = interval(at: start)
+        first.processes[0].reading.energyImpact = 3
+        var child = first.processes[0]
+        child.reading.identity = ProcessIdentity(pid: 124, start: 100)
+        child.reading.energyImpact = 5
+        first.processes.append(child)
+        var second = interval(at: start.addingTimeInterval(15))
+        second.processes[0].reading.energyImpact = 2
+        var missing = child; missing.reading.energyImpact = nil
+        second.processes.append(missing)
+        try store.record(first); try store.record(second)
+        let all = try store.summary(from: start, to: start.addingTimeInterval(30))
+        XCTAssertEqual(all.rows.first?.averageImpact ?? -1, 5, accuracy: 0.001)
+        let member = try store.summary(from: start, to: start.addingTimeInterval(30), entity: "pid:124:100")
+        XCTAssertEqual(member.rows.first?.averageImpact, 5)
+        let latest = try store.summary(from: start.addingTimeInterval(15), to: start.addingTimeInterval(30))
+        XCTAssertEqual(latest.rows.first?.averageImpact, 2)
+    }
+    func testDailyLossIncludesOnlyMeasuredDischargeDays() throws {
+        let store = try HistoryStore(url: directory.appendingPathComponent("history.sqlite"))
+        let today = Calendar.current.startOfDay(for: Date())
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: today)!
+        var charge = interval(at: yesterday.addingTimeInterval(15))
+        charge.batteryJoules = nil; charge.batteryLossPoints = nil; charge.attributionValid = false
+        try store.record(interval(at: yesterday)); try store.record(charge)
+        try store.record(interval(at: today))
+        let result = try store.summary(from: yesterday, to: today.addingTimeInterval(30))
+        XCTAssertEqual(result.dailyLoss.count, 2)
+        XCTAssertEqual(result.dailyLoss[0].points, 0.2, accuracy: 0.001)
+        XCTAssertEqual(result.dailyLoss[1].points, 0.2, accuracy: 0.001)
+    }
     func testMixedExternalPowerHistoryUsesOnlyValidBatteryIntervalsForDrainShare() throws {
         let store = try HistoryStore(url: directory.appendingPathComponent("history.sqlite"))
         let now = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970 / 15) * 15)
