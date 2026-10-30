@@ -28,7 +28,13 @@ The numbers are useful for spotting patterns, but they are **estimates, not a co
 
 The project has no third-party runtime packages. Features and available counters can vary by Mac and macOS version.
 
-## Build and run
+## Install a release
+
+Download the latest Apple silicon `.dmg` from [GitHub Releases](https://github.com/rocktrees/yootrack/releases), open it, and drag YooTrack to Applications. A ZIP of the app and SHA-256 checksums are also provided. Quit an older running version before replacing it.
+
+Release builds are currently **ad-hoc signed and not notarized**. macOS Gatekeeper may block an app downloaded from the internet. Check the [security audit](SECURITY_AUDIT.md) before installing; the optional privileged collector has an unresolved security finding. Releases do not install the collector automatically.
+
+## Build and run from source
 
 1. Clone the repository and enter its directory:
 
@@ -89,6 +95,18 @@ Run the core tests with:
 ```
 
 Open `PowerWatch.xcodeproj` to build in Xcode. For the repository layout, implementation details, and earlier validation notes, see [the repository map](doc/structure.md), [TECH.md](TECH.md), and the [technical reference](doc/REFERENCE.md).
+
+### Releases and versioning
+
+The app version is recorded in `Resources/Info.plist` and follows `MAJOR.MINOR.PATCH`. To prepare a release, update both version fields, commit the changes, and create a GitHub release with a matching tag such as `v1.0.0`. Publishing the release runs GitHub Actions on an Apple silicon runner; after tests pass, it attaches a `.dmg`, app ZIP, and SHA-256 checksums. Assets appear after the workflow finishes.
+
+To build the same artifacts locally on an Apple silicon Mac, run:
+
+```sh
+/bin/sh scripts/release.sh v1.0.0
+```
+
+The script checks that the tag matches the app version, runs the core tests, and places the artifacts in `build/releases/v1.0.0/`. See [AGENTS.md](AGENTS.md) for the project’s versioning and release rules.
 
 ## License
 

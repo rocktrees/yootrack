@@ -234,7 +234,13 @@ struct Dashboard: View {
     private var header: some View {
         HStack(spacing: 18) {
             Image(systemName: "bolt.circle.fill").font(.system(size: 32)).foregroundStyle(.teal)
-            VStack(alignment: .leading, spacing: 3) { Text("YooTrack").font(.title2.bold()); Text("Battery, usage, and money on this Mac").font(.caption).foregroundStyle(.secondary) }
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("YooTrack").font(.title2.bold())
+                    if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String { Text("v" + version).font(.caption).foregroundStyle(.secondary) }
+                }
+                Text("Battery, usage, and money on this Mac").font(.caption).foregroundStyle(.secondary)
+            }
             Spacer()
             VStack(alignment: .trailing) { Text(model.menuLabel).font(.title3).monospacedDigit(); Text((model.sample?.battery?.dischargeWatts ?? 0) > 0 ? (model.sample?.battery?.onBattery == true ? "Battery discharge" : "Battery discharge · plugged in") : "Connected to power").font(.caption).foregroundStyle(.secondary) }
             VStack { Text("GPU " + Display.decimal(model.sample?.gpu?.utilizationPercent, suffix: "%")).monospacedDigit(); Button("Overview") { model.select(app: nil) }.font(.caption) }

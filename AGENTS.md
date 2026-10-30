@@ -1,0 +1,7 @@
+# YooTrack build and release rules
+
+- The canonical app version is `CFBundleShortVersionString` in `Resources/Info.plist`, in `MAJOR.MINOR.PATCH` form. Keep `CFBundleVersion` in the same file equal to it.
+- The first release is v1.0.0. When preparing a later user-facing build with new changes, choose and record the next appropriate version: patch for fixes, minor for compatible features, and major for incompatible changes. Never reuse an existing release tag for different code. Rebuilding the same version from the same commit does not require a version bump; routine test builds are not releases.
+- Update the version before building, testing, tagging, or publishing a release. The Git tag must be `v` followed by the exact app version. Keep release notes and any displayed or documented version consistent with that value.
+- For every GitHub release, run the core tests and create an Apple silicon macOS disk image, app ZIP, and SHA-256 checksums using `sh scripts/release.sh vMAJOR.MINOR.PATCH`. The GitHub Actions release workflow does this for published releases. Verify artifacts and report any failures; do not claim that a release or its assets exist until verified.
+- Do not imply that ad-hoc-signed artifacts are Developer ID-signed or notarized. Preserve the release notes' security and privacy disclosures, including the known privileged-collector risk documented in `SECURITY_AUDIT.md`. Do not install the privileged collector as part of packaging.
