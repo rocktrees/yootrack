@@ -1,0 +1,22 @@
+.build/
+build/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+
+# Local credentials, personal data, and generated diagnostics
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.jsonl
+*.log
+*.xcresult/
+__pycache__/

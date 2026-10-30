@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>elapsed_ns</key><integer>5000000000</integer>
+<key>processor</key><dict><key>cpu_power</key><real>1500</real><key>gpu_power</key><real>250</real><key>ane_power</key><real>100</real></dict>
+<key>tasks</key><array><dict><key>pid</key><integer>123</integer><key>energy_impact</key><real>4.5</real></dict></array>
+<key>coalitions</key><array><dict><key>energy_impact</key><real>99</real></dict></array>
+</dict></plist>
