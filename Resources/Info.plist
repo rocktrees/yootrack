@@ -2,8 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleIdentifier</key><string>ai.powerwatch.app</string>
-<key>CFBundleName</key><string>Power Watch</string>
-<key>CFBundleDisplayName</key><string>Power Watch</string>
+<key>CFBundleName</key><string>YooTrack</string>
+<key>CFBundleDisplayName</key><string>YooTrack</string>
 <key>CFBundleExecutable</key><string>PowerWatch</string>
 <key>CFBundleIconFile</key><string>PowerWatch</string>
 <key>CFBundlePackageType</key><string>APPL</string>
@@ -12,5 +12,5 @@
 <key>LSMinimumSystemVersion</key><string>15.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
-<key>NSHumanReadableCopyright</key><string>Power Watch — local power monitoring</string>
+<key>NSHumanReadableCopyright</key><string>YooTrack — local power monitoring</string>
 </dict></plist>

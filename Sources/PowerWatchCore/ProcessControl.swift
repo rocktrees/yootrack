@@ -7,7 +7,7 @@ public enum ProcessControl {
         && !reading.path.hasPrefix("/System/") && !reading.path.hasPrefix("/usr/libexec/")
     }
     public static func execute(_ reading: ProcessReading, force: Bool) throws {
-        guard allowed(reading) else { throw failure("This process is read-only. Use Quit Power Watch to stop the monitor.") }
+        guard allowed(reading) else { throw failure("This process is read-only. Use Quit YooTrack to stop the monitor.") }
         guard let current = NativeSampler.readProcess(pid: reading.identity.pid), current.identity == reading.identity, current.uid == getuid(), current.path == reading.path else {
             throw failure("The process exited or changed since the last sample. Refresh before trying again.")
         }

@@ -1,6 +1,6 @@
 # Repository map
 
-Power Watch is one Swift package. The Xcode project is generated from the same sources by `scripts/generate-xcode-project.py`.
+YooTrack is one Swift package. The Xcode project is generated from the same sources by `scripts/generate-xcode-project.py`.
 
 ## Apps and tools
 
@@ -26,7 +26,7 @@ Power Watch is one Swift package. The Xcode project is generated from the same s
 | Script | Role |
 | --- | --- |
 | `scripts/test.sh` | `swift test --disable-sandbox` |
-| `scripts/build.sh` | Release app in `build/Power Watch.app` |
+| `scripts/build.sh` | Release app in `build/YooTrack.app` |
 | `scripts/install-app.sh` | Copies that app to `~/Applications` |
 | `scripts/install-helper.sh` / `uninstall-helper.sh` | Administrator collector |
 | `scripts/test-ui.sh` | Regenerates the Xcode project and runs the UI scheme |

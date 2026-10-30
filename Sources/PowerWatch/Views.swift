@@ -81,7 +81,7 @@ struct QuickMenu: View {
     @State private var tab = 0
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack { Image(systemName: "bolt.circle.fill").foregroundStyle(.teal); Text("Power Watch").font(.headline); Spacer(); Text(model.menuLabel).font(.caption).monospacedDigit() }
+            HStack { Image(systemName: "bolt.circle.fill").foregroundStyle(.teal); Text("YooTrack").font(.headline); Spacer(); Text(model.menuLabel).font(.caption).monospacedDigit() }
             Picker("View", selection: $tab) { Text("Live").tag(0); Text("History").tag(1) }
                 .pickerStyle(.segmented).accessibilityIdentifier("menu.view")
             if tab == 0 { liveContent } else { historyContent }
@@ -93,11 +93,11 @@ struct QuickMenu: View {
                 Button("Open Details", action: openDetails).buttonStyle(.borderedProminent).tint(.teal)
                 Spacer(); Button(model.paused ? "Resume" : "Pause") { model.togglePause() }
             }
-            HStack { Button("Settings…") { model.openPreferences() }; Spacer(); Button("Quit Power Watch") { model.quit() } }.font(.caption)
+            HStack { Button("Settings…") { model.openPreferences() }; Spacer(); Button("Quit YooTrack") { model.quit() } }.font(.caption)
         }.padding(14).frame(width: 520).accessibilityElement(children: .contain).accessibilityIdentifier("quick.menu")
             .onAppear { model.visibility("menu", isVisible: true) }.onDisappear { model.visibility("menu", isVisible: false) }
             .onChange(of: tab) { _, next in if next == 1 { model.refreshHistory() } }
-            .alert("Power Watch", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("OK") { model.errorMessage = nil } } message: { Text(model.errorMessage ?? "") }
+            .alert("YooTrack", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("OK") { model.errorMessage = nil } } message: { Text(model.errorMessage ?? "") }
     }
     @ViewBuilder private var liveContent: some View {
             if model.paused { Text("Monitoring is paused.").foregroundStyle(.secondary) }
@@ -225,7 +225,7 @@ struct Dashboard: View {
             guard !Task.isCancelled, key == model.summaryKey else { return }
             readySelectionKey = key
         }
-        .alert("Power Watch", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("OK") { model.errorMessage = nil } } message: { Text(model.errorMessage ?? "") }
+        .alert("YooTrack", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("OK") { model.errorMessage = nil } } message: { Text(model.errorMessage ?? "") }
         .confirmationDialog("Force quit \(forceTarget?.name ?? "process")? Unsaved work can be lost.", isPresented: Binding(get: { forceTarget != nil }, set: { if !$0 { forceTarget = nil } }), titleVisibility: .visible) {
             Button("Force Quit", role: .destructive) { if let target = forceTarget { model.control(target, force: true) }; forceTarget = nil }
             Button("Cancel", role: .cancel) { forceTarget = nil }
@@ -234,7 +234,7 @@ struct Dashboard: View {
     private var header: some View {
         HStack(spacing: 18) {
             Image(systemName: "bolt.circle.fill").font(.system(size: 32)).foregroundStyle(.teal)
-            VStack(alignment: .leading, spacing: 3) { Text("Power Watch").font(.title2.bold()); Text("Battery, usage, and money on this Mac").font(.caption).foregroundStyle(.secondary) }
+            VStack(alignment: .leading, spacing: 3) { Text("YooTrack").font(.title2.bold()); Text("Battery, usage, and money on this Mac").font(.caption).foregroundStyle(.secondary) }
             Spacer()
             VStack(alignment: .trailing) { Text(model.menuLabel).font(.title3).monospacedDigit(); Text((model.sample?.battery?.dischargeWatts ?? 0) > 0 ? (model.sample?.battery?.onBattery == true ? "Battery discharge" : "Battery discharge · plugged in") : "Connected to power").font(.caption).foregroundStyle(.secondary) }
             VStack { Text("GPU " + Display.decimal(model.sample?.gpu?.utilizationPercent, suffix: "%")).monospacedDigit(); Button("Overview") { model.select(app: nil) }.font(.caption) }
@@ -663,7 +663,7 @@ struct Preferences: View {
             .onAppear { model.visibility("settings", isVisible: true) }.onDisappear { model.visibility("settings", isVisible: false) }
             .confirmationDialog("Delete all recorded history?", isPresented: $confirmingClear, titleVisibility: .visible) { Button("Clear History", role: .destructive) { model.clearHistory() } }
             .confirmationDialog("Remove the administrator collector? Basic monitoring will remain available.", isPresented: $confirmingRemove, titleVisibility: .visible) { Button("Remove Collector", role: .destructive) { model.installHelper(removing: true) } }
-            .alert("Power Watch", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("OK") { model.errorMessage = nil } } message: { Text(model.errorMessage ?? "") }
+            .alert("YooTrack", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("OK") { model.errorMessage = nil } } message: { Text(model.errorMessage ?? "") }
     }
 }
 

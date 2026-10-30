@@ -1,4 +1,6 @@
-# Power Watch optimization notes
+# YooTrack optimization notes
+
+> Historical notes: product names and example app paths were updated for the YooTrack rename; the observations below describe earlier builds.
 
 Last updated: 2026-10-14.
 
@@ -38,7 +40,7 @@ Evidence and reproduction:
 - [Detailed benchmark methodology](benchmarks/README.md).
 - [Build script](benchmarks/build.sh) and [comparison runner](benchmarks/run-comparison.py).
 - Results: `build/rust-swift-comparison.json`, `build/rust-swift-comparison.log`, and `build/rust-swift-comparison-repeat.log`. The JSON contains repeat raw trials and the first batch's logged summary.
-- The official minimal Rust toolchain is isolated in `build/rust-toolchain/`; it did not change shell PATH or add a runtime dependency to Power Watch.
+- The official minimal Rust toolchain is isolated in `build/rust-toolchain/`; it did not change shell PATH or add a runtime dependency to YooTrack.
 
 ## Installed app baseline
 
@@ -50,12 +52,12 @@ The language evaluation's component check ran for 60.41 seconds with the interfa
 
 | Component | Average CPU, % of one core |
 | --- | ---: |
-| Power Watch app | 0.364% |
+| YooTrack app | 0.364% |
 | Collection helper | 0.480% |
 | Apple's powermetrics | 0.513% |
 | Combined | 1.357% |
 
-No component restarted during this check. Approximately 38% of measured CPU came from Apple's executable; rewriting Power Watch cannot optimize its internal work. This short check does not establish a new acceptance baseline. Results: `build/component-overhead-rust-evaluation.json`; runner: [component overhead script](benchmarks/component-overhead.py).
+No component restarted during this check. Approximately 38% of measured CPU came from Apple's executable; rewriting YooTrack cannot optimize its internal work. This short check does not establish a new acceptance baseline. Results: `build/component-overhead-rust-evaluation.json`; runner: [component overhead script](benchmarks/component-overhead.py).
 
 A read-only 20-second stack profile captured history recording, SQLite writes/checkpoints, grouping, JSON decoding, and menu bar updates. Stack counts include waiting and are not exact CPU percentages. Profile: `build/app-background-profile.txt`.
 
@@ -115,7 +117,7 @@ For each experiment, append: date, hypothesis, affected feature/path, before/aft
 - Added a native XCUITest target/scheme and `/bin/sh scripts/test-ui.sh`. Test fixtures contain 1,000 synthetic processes in 250 groups with isolated temporary storage and monitoring disabled; no collector/real history access. Test builds live outside synced Desktop to avoid Finder metadata invalidating signatures. Stable accessibility identifiers and opt-in tab render diagnostics make the checks repeatable.
 - Baseline captured six handler-to-view updates (97–159 ms); Mission Control interrupted the remaining clicks, so this is an incomplete baseline, not an app failure or a controlled performance ratio. Artifact: `build/tab-before-partial.jsonl`; failed-run diagnostics: `build/ui-before-native.xcresult`.
 - Full-row native UI checks now pass for apps, processes (including indentation) and History; disclosure behavior remains independent. The first test run read macOS static-text labels instead of values; fixed the test assertion to wait for either representation. All four final native tests pass (`build/ui-tabs-cached.xcresult`, `build/ui-tabs-cached.log`). The 24-transition run measured 65.6 ms overall median, 73.2 ms p95, and 128.1 ms maximum (first History open). Remaining warm switches ranged 46.1–73.2 ms. Live median was 65.8 ms; History median 65.4 ms. These are handler-to-view-update/next-main-loop timings, not final display presentation. 50 core tests pass (`build/tests-row-tabs.log`). Release build: `build/build-row-tabs.log`.
-- No new ten-minute CPU/memory benchmark; previous overhead target status remains unchanged. Validated Release installed at /Users/josh/Applications/Power Watch.app and launched normally with interaction diagnostics disabled. Existing history rendered after relaunch. Collector repair completed; installed signing hash accepted and authenticated live hardware/network readings verified on 2026-10-13.
+- No new ten-minute CPU/memory benchmark; previous overhead target status remains unchanged. Validated Release installed at /Users/josh/Applications/YooTrack.app and launched normally with interaction diagnostics disabled. Existing history rendered after relaunch. Collector repair completed; installed signing hash accepted and authenticated live hardware/network readings verified on 2026-10-13.
 
 - Intermediate complete runs before tab reuse measured roughly 103–107 ms overall medians and 127–133 ms Live medians. A split-timing run showed only 13–26 ms to NSView update and 53–110 ms additional callback delay; tab view reuse reduced the latter. Runs are not a controlled CPU benchmark. Summary: `build/tab-latency-comparison.json`; reproducible parser: `benchmarks/tab-latency.py`. The initial stack-profile attachment attempt did not find the fixture process; no stack-profile conclusion is claimed.
 
@@ -126,5 +128,5 @@ For each experiment, append: date, hypothesis, affected feature/path, before/aft
 - Added clickable App/name, CPU, Memory, GPU, Network and Power headers to the menu and Live list. A second click reverses direction; the arrow and existing sort picker stay synchronized. Expanded processes follow the same sort. Network uses combined known receive/send traffic. Missing readings stay last in both directions; known zero remains a real reading. Menu ranking stays independent of the details search.
 - Shared comparator tests cover every metric in both directions, unavailable/zero values, deterministic ties, names, combined network rates and individual processes. All 53 core tests pass (build/tests-compact-sort.log).
 - Five native interaction tests passed in build/ui-compact-sort.xcresult (row hit areas, expanded processes, History rows, Live header reversal, tab switching). The initial popup-opening test failed to open the status-item window. The exact QuickMenu view is now hosted in a normal fixture window for deterministic native testing: width and all six headers in both directions pass in build/ui-menu-content.xcresult. This validates popup content, not status-item opening behavior. The fixture window requires both --ui-testing and --test-quick-menu; normal launches are unaffected.
-- Final Release built (build/build-compact-sort-final.log), installed at /Users/josh/Applications/Power Watch.app, and launched normally. Existing history retained; no interaction logging enabled. Live CPU, memory and native GPU readings observed. Collector repair approved by the user and completed on 2026-10-14. Installed signing hash matches the root-owned collector configuration. Relaunched the app to load the final executable identity; authenticated full-process collection resumed. A transient powermetrics proc_pidpath error cleared on a subsequent sample; fresh network rates, CPU hardware power (3.35 W), GPU hardware power (0.80 W) and native process GPU readings were verified. Power Watch’s three monitoring processes appear together. The earlier automatic approval rejection was resolved through explicit user confirmation.
+- Final Release built (build/build-compact-sort-final.log), installed at /Users/josh/Applications/YooTrack.app, and launched normally. Existing history retained; no interaction logging enabled. Live CPU, memory and native GPU readings observed. Collector repair approved by the user and completed on 2026-10-14. Installed signing hash matches the root-owned collector configuration. Relaunched the app to load the final executable identity; authenticated full-process collection resumed. A transient powermetrics proc_pidpath error cleared on a subsequent sample; fresh network rates, CPU hardware power (3.35 W), GPU hardware power (0.80 W) and native process GPU readings were verified. YooTrack’s three monitoring processes appear together. The earlier automatic approval rejection was resolved through explicit user confirmation.
 - Sorting/filtering remains cached outside view bodies; no sampling or collection cadence change. No new background overhead acceptance benchmark; previous CPU target remains unmet.

@@ -95,7 +95,7 @@ public struct PlaidClient: Sendable {
         session = CredentialNetwork.session
     }
     public func createHostedLink(clientID: String, secret: String, userID: String) async throws -> (url: URL, token: String) {
-        let body: [String: Any] = ["client_id": clientID, "secret": secret, "client_name": "Power Watch", "language": "en", "country_codes": ["US"], "user": ["client_user_id": userID], "products": ["transactions"], "optional_products": ["investments"], "transactions": ["days_requested": 90], "hosted_link": ["url_lifetime_seconds": 1800]]
+        let body: [String: Any] = ["client_id": clientID, "secret": secret, "client_name": "YooTrack", "language": "en", "country_codes": ["US"], "user": ["client_user_id": userID], "products": ["transactions"], "optional_products": ["investments"], "transactions": ["days_requested": 90], "hosted_link": ["url_lifetime_seconds": 1800]]
         let data = try await post("/link/token/create", body)
         guard let link = FinanceParser.hostedLink(data) else { throw failure(data) }
         return link

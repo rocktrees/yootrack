@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Observe only Power Watch and its collector. Close the app's windows/menu before running."""
+"""Observe only YooTrack and its collector. Close the app's windows/menu before running."""
 import argparse
 import ctypes
 import json

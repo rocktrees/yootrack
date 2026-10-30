@@ -1,6 +1,6 @@
 # Swift / Rust evaluation
 
-This is an isolated performance experiment, not a replacement app. The installed Power Watch app and authenticated helper are unchanged. All existing features remain in the Swift app.
+This is an isolated performance experiment, not a replacement app. The installed YooTrack app and authenticated helper are unchanged. All existing features remain in the Swift app.
 
 ## Result on this Mac (2026-10-11)
 
@@ -36,7 +36,7 @@ The Rust prototype does **not** implement GPU, battery, grouping, history, XPC s
 
 A Rust core can expose a C-compatible interface to Swift; Swift already interoperates with C APIs. Keep SwiftUI/AppKit menu/window integration, Apple's Foundation Models, and the authenticated XPC/security shell in Swift. Move collection/math/storage behind a bounded C interface only if further profiles find a worthwhile bottleneck. The Rust ABI must not expose native Rust strings/collections directly; define ownership, nullable metrics, errors and threading explicitly.
 
-Apple's powermetrics is a separate executable. Rewriting Power Watch's code cannot change the work inside that executable. Its cadence/samplers/serialization architecture need separate evaluation if they dominate.
+Apple's powermetrics is a separate executable. Rewriting YooTrack's code cannot change the work inside that executable. Its cadence/samplers/serialization architecture need separate evaluation if they dominate.
 
 Sources: [Rust FFI documentation](https://doc.rust-lang.org/nomicon/ffi.html), [Swift's default C interoperability](https://www.swift.org/documentation/cxx-interop/).
 
@@ -47,9 +47,9 @@ Sources: [Rust FFI documentation](https://doc.rust-lang.org/nomicon/ffi.html), [
 python3 benchmarks/run-comparison.py
 ```
 
-A Rust compiler is required. This run installed the official minimal toolchain under `build/rust-toolchain/` without modifying shell PATH or installing global toolchain settings. It is only a build dependency; it is not added to Power Watch's runtime. Build artifacts are `build/benchmark-swift`, `build/benchmark-rust`, `build/rust-swift-comparison.json` and its log.
+A Rust compiler is required. This run installed the official minimal toolchain under `build/rust-toolchain/` without modifying shell PATH or installing global toolchain settings. It is only a build dependency; it is not added to YooTrack's runtime. Build artifacts are `build/benchmark-swift`, `build/benchmark-rust`, `build/rust-swift-comparison.json` and its log.
 
-For installed component CPU costs, close all Power Watch windows and the menu, let its background cadence settle, then run:
+For installed component CPU costs, close all YooTrack windows and the menu, let its background cadence settle, then run:
 
 ```sh
 python3 benchmarks/component-overhead.py

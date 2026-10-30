@@ -1,10 +1,10 @@
-# Power Watch
+# YooTrack
 
 **See what is using your Mac’s battery, processor, memory, network, and GPU—right from the menu bar.**
 
-Power Watch is a native macOS app for understanding what is running on your Mac and how its activity changes over time. Open the menu for a quick look, or open the details window to explore individual apps, processes, and history. It also includes AI service usage tracking and an optional personal money dashboard.
+YooTrack is a native macOS app for understanding what is running on your Mac and how its activity changes over time. Open the menu for a quick look, or open the details window to explore individual apps, processes, and history. It also includes AI service usage tracking and an optional personal money dashboard.
 
-> **Early-stage software:** Power Watch can automatically read locally available Cursor, Codex, and Claude credentials and usage logs to check your usage. Its optional full collector requires administrator access and has known security limitations. Read the [disclaimer](DISCLAIMER.md) and [security audit](SECURITY_AUDIT.md) before installing or connecting sensitive accounts.
+> **Early-stage software:** YooTrack can automatically read locally available Cursor, Codex, and Claude credentials and usage logs to check your usage. Its optional full collector requires administrator access and has known security limitations. Read the [disclaimer](DISCLAIMER.md) and [security audit](SECURITY_AUDIT.md) before installing or connecting sensitive accounts.
 
 ## What you can do
 
@@ -16,7 +16,7 @@ Power Watch is a native macOS app for understanding what is running on your Mac 
 
 ## How it works
 
-Power Watch samples system and process counters provided by macOS, groups related processes, and stores history locally. Basic monitoring works without administrator access. An optional privileged collector uses Apple’s `powermetrics` tool to provide additional measurements, including Energy Impact, network rates, and hardware power.
+YooTrack samples system and process counters provided by macOS, groups related processes, and stores history locally. Basic monitoring works without administrator access. An optional privileged collector uses Apple’s `powermetrics` tool to provide additional measurements, including Energy Impact, network rates, and hardware power.
 
 The numbers are useful for spotting patterns, but they are **estimates, not a complete accounting of the energy caused by each app**. Shared system services, graphics, the display, and other hardware cannot always be attributed to an individual app. See [Understanding the numbers](#understanding-the-numbers) and the [disclaimer](DISCLAIMER.md).
 
@@ -37,15 +37,17 @@ The project has no third-party runtime packages. Features and available counters
    cd yootrack
    ```
 
-2. Build and install the app into `~/Applications`:
+2. If an earlier version is running, quit it. Build and install the app into `~/Applications`:
 
    ```sh
    /bin/sh scripts/build.sh
    /bin/sh scripts/install-app.sh
-   open "$HOME/Applications/Power Watch.app"
+   open "$HOME/Applications/YooTrack.app"
    ```
 
-3. Click the **Power Watch** icon in the menu bar. Use **Live** or **History** in the popover, and choose **Open Details** for the full window. Closing that window leaves the app running; use **Quit Power Watch** in the menu to stop it.
+3. Click the **YooTrack** icon in the menu bar. Use **Live** or **History** in the popover, and choose **Open Details** for the full window. Closing that window leaves the app running; use **Quit YooTrack** in the menu to stop it.
+
+If you used an earlier version, the installer renames its app bundle when needed. On first launch, YooTrack moves its existing history and money data to the YooTrack data folder. Existing settings and Keychain items retain their internal identifiers. If both data folders already exist, YooTrack uses its own folder and leaves the earlier one untouched. Check your launch-at-login setting after upgrading.
 
 These scripts produce a locally ad-hoc-signed build, not a Developer ID–signed and notarized release. See the [security audit](SECURITY_AUDIT.md) for distribution limitations.
 
@@ -71,8 +73,8 @@ A dash means a reading is unavailable or needs another sample. History is record
 
 ## Privacy and connections
 
-- **History and money data:** Process history and the money ledger are stored locally in `~/Library/Application Support/Power Watch/`. The ledger is not separately encrypted by the app. Saved credentials and access tokens are stored in macOS Keychain.
-- **AI usage:** Power Watch automatically looks for available local Cursor, Codex, and Claude sessions and usage logs and contacts the corresponding services. This happens without a separate per-provider opt-in in the current version.
+- **History and money data:** Process history and the money ledger are stored locally in `~/Library/Application Support/YooTrack/`. The ledger is not separately encrypted by the app. Saved credentials and access tokens are stored in macOS Keychain.
+- **AI usage:** YooTrack automatically looks for available local Cursor, Codex, and Claude sessions and usage logs and contacts the corresponding services. This happens without a separate per-provider opt-in in the current version.
 - **Plaid and Jev:** Plaid is used only when you configure and connect it. Jev is off by default; if enabled and requested, it receives payee names for categorization.
 - **Process details:** Paths and filtered launch arguments can contain sensitive information. Treat anything you copy or share from the app as potentially private.
 
@@ -90,4 +92,4 @@ Open `PowerWatch.xcodeproj` to build in Xcode. For the repository layout, implem
 
 ## License
 
-Power Watch is available under the [MIT License](LICENSE).
+YooTrack is available under the [MIT License](LICENSE).

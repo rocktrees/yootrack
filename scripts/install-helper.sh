@@ -1,5 +1,5 @@
 #!/bin/sh
-# Usage: sudo /bin/sh scripts/install-helper.sh '/absolute/Power Watch.app' USER_UID
+# Usage: sudo /bin/sh scripts/install-helper.sh '/absolute/YooTrack.app' USER_UID
 set -eu
 PATH=/usr/bin:/bin:/usr/sbin:/sbin
 export PATH
@@ -58,4 +58,4 @@ mv -f "$stage/helper" "$directory/ai.powerwatch.collector"
 mv -f "$stage/config" "$directory/ai.powerwatch.collector.plist"
 mv -f "$stage/daemon" "$daemon"
 launchctl bootstrap system "$daemon"
-printf 'Power Watch collector installed for UID %s. Reopen the app or wait for its next sample.\n' "$uid"
+printf 'YooTrack collector installed for UID %s. Reopen the app or wait for its next sample.\n' "$uid"

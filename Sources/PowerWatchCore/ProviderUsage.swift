@@ -169,7 +169,7 @@ public struct KeychainSecretStore: Sendable {
 }
 
 public enum CursorAuth {
-    /// Read Cursor's local session without writing its database. A saved Power Watch token wins at the call site.
+    /// Read Cursor's local session without writing its database. A saved YooTrack token wins at the call site.
     public static func accessToken(database: URL) -> String? {
         var db: OpaquePointer?
         let encoded = database.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? database.path

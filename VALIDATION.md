@@ -1,6 +1,8 @@
 # Local validation
 
-Test machine: Apple silicon, macOS 26.4.1. Local ad-hoc signed Release app installed at `/Users/josh/Applications/Power Watch.app`.
+> Historical notes: product names and example app paths were updated for the YooTrack rename; the observations below describe earlier builds.
+
+Test machine: Apple silicon, macOS 26.4.1. Local ad-hoc signed Release app installed at `/Users/josh/Applications/YooTrack.app`.
 
 ## Verified
 
@@ -11,7 +13,7 @@ Test machine: Apple silicon, macOS 26.4.1. Local ad-hoc signed Release app insta
 - Disposable applications verified normal quit, a cancelled quit remaining alive, and force quit. Disposable background processes verified SIGTERM, SIGKILL, and rejection of changed identity.
 - Kernel-enforced XPC authentication accepts the expected signature and rejects a different signature. The installed root helper also rejected the separately signed probe.
 - Administrator installation succeeded on this Mac. The app connects to the installed helper and displays live CPU/GPU/Neural Engine estimates and process Energy Impact.
-- Live Power Watch grouping includes the app, root collector, and its persistent `powermetrics` subprocess, with individual rows available on expansion.
+- Live YooTrack grouping includes the app, root collector, and its persistent `powermetrics` subprocess, with individual rows available on expansion.
 - Search, process expansion, settings, window closing, reopening, and persisted history were checked in the installed app.
 - Closing the interface switches sampling to 15 seconds; open views use 5 seconds. The first hardware reading after a cadence change needs a new collector sample.
 - Stopping the app stopped its `powermetrics` subprocess; the root helper remained idle. Restarting retained history. A rebuilt app was rejected by the old signing pin until collector repair, as intended.
@@ -54,7 +56,7 @@ Administrator uninstall and reinstall were exercised through Settings on this Ma
 ## 2026-10-11 resource columns and process context update
 
 - 34 SwiftPM tests pass (`build/tests-resource-context.log`); Release bundle builds and passes strict ad-hoc signature verification (`build/build-resource-context.log`). Xcode project regenerated for new sources.
-- Updated installed bundle at `/Users/josh/Applications/Power Watch.app`; repaired root collector authentication after the signature changed; live diagnostics confirmed connected collection.
+- Updated installed bundle at `/Users/josh/Applications/YooTrack.app`; repaired root collector authentication after the signature changed; live diagnostics confirmed connected collection.
 - Displayed battery 99% matched `pmset -g batt`; the separate raw gauge was approximately 94–97%. Charging history remains excluded from app drain attribution.
 - Separate CPU, memory, GPU execution and network columns compile in the menu and render in the details list; new GPU and network sort options are available.
 - Live receive/send rates were positive across several processes. Network sampler is explicitly enabled. Per-process GPU timing is absent from powermetrics on this Mac; the native GPU follow-up below supplies it through IOKit. Total GPU hardware power is available separately. Missing/stale data remains unavailable rather than idle.
@@ -75,7 +77,7 @@ Final individual guided role explanation was verified in the normal app launch. 
 - A real Metal compute workload ran for 5.017 seconds: Metal command buffers reported 3.543 active seconds; the driver counter reported 60.623% process activity (about 3.04 seconds, within the test's 20% tolerance). The next five-second idle interval reported 0%. Device utilization was 91% during the load, with other GPU clients also active. Raw samples: `build/gpu-live-validation.json`; workload log: `build/gpu-workload.log`. This verifies units and response, not exact equivalence between command-buffer timestamps and driver accounting.
 - Native collection observed 28 reporting processes during this test, including Chrome GPU helpers, Python, Codex, WindowServer, and the disposable Metal workload. The installed app displayed device GPU utilization and read 26 process rates in basic mode before collector repair.
 
-- Collector repair completed for the rebuilt app. Live authenticated samples include native GPU rates, network rates, Energy Impact, and GPU watts with no collection issue. The installed UI was checked with GPU sorting: WindowServer, Chrome, ChatGPT/Codex, WebKit, Ghostty and Power Watch showed measured GPU values.
+- Collector repair completed for the rebuilt app. Live authenticated samples include native GPU rates, network rates, Energy Impact, and GPU watts with no collection issue. The installed UI was checked with GPU sorting: WindowServer, Chrome, ChatGPT/Codex, WebKit, Ghostty and YooTrack showed measured GPU values.
 
 - Native GPU background smoke check (40.06 seconds, full collector, 15-second cadence): 1.623% of one core, app footprint 99.27 MiB, combined collector footprint 20.84 MiB. Memory targets passed; the original below-1% CPU target remains unmet. This is a brief smoke check, not a new ten-minute acceptance run. Report: `build/overhead-gpu-smoke.json`.
 - Final app relaunched normally with diagnostic recording disabled; history preserved.
@@ -126,5 +128,5 @@ Final individual guided role explanation was verified in the normal app launch. 
 - Added clickable App/name, CPU, Memory, GPU, Network and Power headers to the menu and Live list. A second click reverses direction; the arrow and existing sort picker stay synchronized. Expanded processes follow the same sort. Network uses combined known receive/send traffic. Missing readings stay last in both directions; known zero remains a real reading. Menu ranking stays independent of the details search.
 - Shared comparator tests cover every metric in both directions, unavailable/zero values, deterministic ties, names, combined network rates and individual processes. All 53 core tests pass (build/tests-compact-sort.log).
 - Five native interaction tests passed in build/ui-compact-sort.xcresult (row hit areas, expanded processes, History rows, Live header reversal, tab switching). The initial popup-opening test failed to open the status-item window. The exact QuickMenu view is now hosted in a normal fixture window for deterministic native testing: width and all six headers in both directions pass in build/ui-menu-content.xcresult. This validates popup content, not status-item opening behavior. The fixture window requires both --ui-testing and --test-quick-menu; normal launches are unaffected.
-- Final Release built (build/build-compact-sort-final.log), installed at /Users/josh/Applications/Power Watch.app, and launched normally. Existing history retained; no interaction logging enabled. Live CPU, memory and native GPU readings observed. Collector repair approved by the user and completed on 2026-10-14. Installed signing hash matches the root-owned collector configuration. Relaunched the app to load the final executable identity; authenticated full-process collection resumed. A transient powermetrics proc_pidpath error cleared on a subsequent sample; fresh network rates, CPU hardware power (3.35 W), GPU hardware power (0.80 W) and native process GPU readings were verified. Power Watch’s three monitoring processes appear together. The earlier automatic approval rejection was resolved through explicit user confirmation.
+- Final Release built (build/build-compact-sort-final.log), installed at /Users/josh/Applications/YooTrack.app, and launched normally. Existing history retained; no interaction logging enabled. Live CPU, memory and native GPU readings observed. Collector repair approved by the user and completed on 2026-10-14. Installed signing hash matches the root-owned collector configuration. Relaunched the app to load the final executable identity; authenticated full-process collection resumed. A transient powermetrics proc_pidpath error cleared on a subsequent sample; fresh network rates, CPU hardware power (3.35 W), GPU hardware power (0.80 W) and native process GPU readings were verified. YooTrack’s three monitoring processes appear together. The earlier automatic approval rejection was resolved through explicit user confirmation.
 - Sorting/filtering remains cached outside view bodies; no sampling or collection cadence change. No new background overhead acceptance benchmark; previous CPU target remains unmet.

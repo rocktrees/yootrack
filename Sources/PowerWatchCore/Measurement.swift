@@ -10,8 +10,8 @@ public enum ProcessGrouping {
         let rootForPath = bundleResolver ?? { bundleRoot(for: $0) }
         var groups: [Int32: (key: String, name: String, bundle: String?)] = [:]
         for p in processes {
-            if ["PowerWatch", "PowerWatchHelper", "ai.powerwatch.collector"].contains(p.name) || p.path.hasSuffix("/Power Watch.app/Contents/MacOS/PowerWatch") {
-                groups[p.identity.pid] = (PowerWatchConstants.monitorGroup, "Power Watch", rootForPath(p.path))
+            if ["PowerWatch", "PowerWatchHelper", "ai.powerwatch.collector"].contains(p.name) || p.path.hasSuffix("/YooTrack.app/Contents/MacOS/PowerWatch") || p.path.hasSuffix("/Power Watch.app/Contents/MacOS/PowerWatch") {
+                groups[p.identity.pid] = (PowerWatchConstants.monitorGroup, "YooTrack", rootForPath(p.path))
             } else if let root = rootForPath(p.path) {
                 groups[p.identity.pid] = ("app:" + root, URL(fileURLWithPath: root).deletingPathExtension().lastPathComponent, root)
             }
@@ -24,7 +24,7 @@ public enum ProcessGrouping {
             }
             // powermetrics runs as root under the monitor's helper, so allow that exact relationship.
             if p.name == "powermetrics", let parent = byPID[p.parentPID], ["PowerWatchHelper", "ai.powerwatch.collector"].contains(parent.name), parent.identity.start <= p.identity.start {
-                groups[p.identity.pid] = (PowerWatchConstants.monitorGroup, "Power Watch", nil)
+                groups[p.identity.pid] = (PowerWatchConstants.monitorGroup, "YooTrack", nil)
             }
             if groups[p.identity.pid] == nil {
                 let key = p.path.isEmpty ? "instance:" + p.identity.key : "process:\(p.uid):\(p.path)"
@@ -93,8 +93,8 @@ public enum ProcessDescriptions {
         case "bird", "cloudd": return "iCloud synchronization and related background work."
         case "backupd": return "Time Machine backup service."
         case "powerd": return "macOS power management service."
-        case "powermetrics": return "Apple's power metrics collector. When launched by Power Watch, its usage is included with the monitor."
-        case "PowerWatch", "PowerWatchHelper", "ai.powerwatch.collector": return "Power Watch monitoring and measurement collection. This usage is included in the monitor's total."
+        case "powermetrics": return "Apple's power metrics collector. When launched by YooTrack, its usage is included with the monitor."
+        case "PowerWatch", "PowerWatchHelper", "ai.powerwatch.collector": return "YooTrack monitoring and measurement collection. This usage is included in the monitor's total."
         default:
             if let bundleName { return "A process belonging to \(bundleName). macOS metadata identifies its owner; its specific task is not available." }
             return "A local executable. Its name, path, owner, and parent are shown below; no verified description is available."

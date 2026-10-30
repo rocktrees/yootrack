@@ -2,17 +2,17 @@
 
 > This reference preserves the project's earlier technical notes. For current installation guidance and known security limitations, see the [README](../README.md), [disclaimer](../DISCLAIMER.md), and [security audit](../SECURITY_AUDIT.md). Details below may describe an earlier build or a particular test machine.
 
-# Power Watch
+# YooTrack
 
 A native Apple silicon Mac menu bar app for battery use and private money tracking. Built with SwiftUI, AppKit, libproc, IOKit, and SQLite; no third-party runtime dependencies. Provider quotas, and Plaid or Jev only if you connect them, are the network calls.
 
 ## Open the app
 
-The installed local build is `~/Applications/Power Watch.app`. Open it to show the details window. Closing that window leaves the app running in the menu bar; **Quit Power Watch** stops monitoring. The app has no Dock icon.
+The installed local build is `~/Applications/YooTrack.app`. Open it to show the details window. Closing that window leaves the app running in the menu bar; **Quit YooTrack** stops monitoring. The app has no Dock icon.
 
 The menu shows battery level and discharge watts on battery. Its popover includes Live top consumers and a History tab with period selection, processor energy, average power, and each app’s processor-energy share. The detail window offers searchable processes, app groups, individual process information, live readings, history, and a Money tab. Money stays in a local ledger. You can add spending by hand, set monthly limits, and chart holdings. Plaid sync is optional and keeps its tokens in Keychain. Categories are decided on this Mac. Jev is off unless you turn it on, and then only payee names are sent. Dollar amounts are not shown in the menu bar.
 
-The menu also shows remaining usage for Cursor, Anthropic, and OpenAI, including the date and time each limit resets. Cursor shows two limits: in-house models (Auto and Composer) and third-party API models. The token is the Cursor app session in `state.vscdb`, shared with the agent CLI, and Power Watch does not ask for the keychain password. Codex uses the ChatGPT login in `~/.codex/auth.json`. A saved key is only a fallback and stays in Keychain. Quotas refresh about once a minute while a window is open.
+The menu also shows remaining usage for Cursor, Anthropic, and OpenAI, including the date and time each limit resets. Cursor shows two limits: in-house models (Auto and Composer) and third-party API models. The token is the Cursor app session in `state.vscdb`, shared with the agent CLI, and YooTrack does not ask for the keychain password. Codex uses the ChatGPT login in `~/.codex/auth.json`. A saved key is only a fallback and stays in Keychain. Quotas refresh about once a minute while a window is open.
 
 The compact menu is 520 points wide. Click App, CPU, Memory, GPU, Network, or Power in the menu or Live list to sort; click the same header again to reverse. An arrow marks the current direction. Network sorts by combined download/upload rate, and missing readings stay last in either direction. Expanded processes follow the same sort. Hover over a shortened menu name to see its full name.
 
@@ -33,7 +33,7 @@ The helper authenticates XPC peers against the installed app's exact code signat
 Terminal installation is also supported:
 
 ```sh
-sudo /bin/sh scripts/install-helper.sh "$HOME/Applications/Power Watch.app" "$(id -u)"
+sudo /bin/sh scripts/install-helper.sh "$HOME/Applications/YooTrack.app" "$(id -u)"
 ```
 
 Remove it through Settings → Remove Collector, or:
@@ -42,7 +42,7 @@ Remove it through Settings → Remove Collector, or:
 sudo /bin/sh scripts/uninstall-helper.sh
 ```
 
-Removal retains the app and history. Launch at login is optional in Settings. No Accessibility, Full Disk Access, or screen recording permission is needed by Power Watch.
+Removal retains the app and history. Launch at login is optional in Settings. No Accessibility, Full Disk Access, or screen recording permission is needed by YooTrack.
 
 ## What the numbers mean
 
@@ -62,9 +62,9 @@ Removal retains the app and history. Launch at login is optional in Settings. No
 | Battery contribution, points | The app's estimated share × observed battery percentage-point loss, calculated interval by interval. |
 | Hardware and unattributed | The remaining battery energy, including graphics, screen, hardware, inaccessible processes, and missed short-lived work. |
 
-No app estimates are scaled up to total 100%. Inconsistent counters disable attribution for that interval. Charging, power-source transitions, counter resets, sleep, and sampling gaps do not create battery-loss attribution. A battery can discharge while plugged in: Power Watch shows and records that physical drain, but excludes it from per-app battery attribution because the adapter also supplies energy. CPU can exceed 100% when multiple cores are active. A dash means unavailable or awaiting a baseline; a supported zero counter means idle.
+No app estimates are scaled up to total 100%. Inconsistent counters disable attribution for that interval. Charging, power-source transitions, counter resets, sleep, and sampling gaps do not create battery-loss attribution. A battery can discharge while plugged in: YooTrack shows and records that physical drain, but excludes it from per-app battery attribution because the adapter also supplies energy. CPU can exceed 100% when multiple cores are active. A dash means unavailable or awaiting a baseline; a supported zero counter means idle.
 
-Power Watch groups helpers by app bundle and verified parent relationships. Work performed by shared system services remains separately identified. Descriptions use local metadata and a small built-in service glossary; unknown executables are not assigned invented explanations.
+YooTrack groups helpers by app bundle and verified parent relationships. Work performed by shared system services remains separately identified. Descriptions use local metadata and a small built-in service glossary; unknown executables are not assigned invented explanations.
 
 ## Identify what is actually running
 
@@ -74,7 +74,7 @@ Context is inspected only for selected/expanded apps, stays in memory, and is di
 
 **Summarize app processes** and **Summarize this process** use Apple's on-device Foundation Models when available on macOS 26. Verified launch facts are displayed separately from the AI role explanation; parent relationships and directories are never generated by AI. Inference runs only when requested, with no API key or cloud fallback. The app checks eligibility, Apple Intelligence enablement, and model readiness before enabling the button. See [Apple's model availability documentation](https://developer.apple.com/documentation/foundationmodels/systemlanguagemodel). Very large sets of distinct roles may require selecting a smaller group. AI descriptions remain interpretations.
 
-Native GPU activity uses public read-only IOKit registry APIs to read driver-defined IOAccelerator statistics and per-client accumulated GPU time. This Mac exposes those counters even though powermetrics omits process GPU timing. Client registry IDs plus PID/start-time identities protect against reused processes. New clients, counter resets, changed arrays, pause/sleep, and gaps over 30 seconds establish new baselines. Missing data is a dash; a measured zero is idle. Partially readable groups show the available subtotal; missed clients are not reconstructed. These driver-defined keys can change with macOS. Their interpretation is also described in [ActivityMonitor’s measurement documentation](https://github.com/wieslawsoltes/ActivityMonitor/blob/main/docs/METRICS.md); Power Watch validates its own implementation against a real Metal workload on this Mac. No subprocess or administrator privilege is needed for GPU activity; total GPU watts still require the collector. Network collection includes the network sampler and reports received/sent bytes per second. Stale collector frames are excluded from live rates and explicitly identified.
+Native GPU activity uses public read-only IOKit registry APIs to read driver-defined IOAccelerator statistics and per-client accumulated GPU time. This Mac exposes those counters even though powermetrics omits process GPU timing. Client registry IDs plus PID/start-time identities protect against reused processes. New clients, counter resets, changed arrays, pause/sleep, and gaps over 30 seconds establish new baselines. Missing data is a dash; a measured zero is idle. Partially readable groups show the available subtotal; missed clients are not reconstructed. These driver-defined keys can change with macOS. Their interpretation is also described in [ActivityMonitor’s measurement documentation](https://github.com/wieslawsoltes/ActivityMonitor/blob/main/docs/METRICS.md); YooTrack validates its own implementation against a real Metal workload on this Mac. No subprocess or administrator privilege is needed for GPU activity; total GPU watts still require the collector. Network collection includes the network sampler and reports received/sent bytes per second. Stale collector frames are excluded from live rates and explicitly identified.
 
 GPU percentages describe sampled activity, not battery attribution. The existing historical charts show processor energy; graphics energy remains in hardware and unattributed consumption.
 
@@ -82,9 +82,9 @@ History offers **1 minute, 5 minutes, 30 minutes, last hour, today, seven days, 
 
 ## History and overhead
 
-Samples run every 15 seconds in the background and 5 seconds while a view is open. Sleep pauses collection and waking restarts baselines. History stays in `~/Library/Application Support/Power Watch/history.sqlite`, using sparse 15-second buckets for the latest hour, one-minute buckets for the latest day, and five-minute buckets afterward (compacted during hourly maintenance). Retention is seven days with oldest-first pruning at a 250 MB limit, checked during maintenance. The UI shows the actual available range. Queries at bucket edges are approximate; gaps are not interpolated as activity.
+Samples run every 15 seconds in the background and 5 seconds while a view is open. Sleep pauses collection and waking restarts baselines. History stays in `~/Library/Application Support/YooTrack/history.sqlite`, using sparse 15-second buckets for the latest hour, one-minute buckets for the latest day, and five-minute buckets afterward (compacted during hourly maintenance). Retention is seven days with oldest-first pruning at a 250 MB limit, checked during maintenance. The UI shows the actual available range. Queries at bucket edges are approximate; gaps are not interpolated as activity.
 
-The monitor's app, helper, and its own `powermetrics` process appear together as **Power Watch**. Independent instances of `powermetrics` remain separate. Its memory and processor power are visible like any other app.
+The monitor's app, helper, and its own `powermetrics` process appear together as **YooTrack**. Independent instances of `powermetrics` remain separate. Its memory and processor power are visible like any other app.
 
 To repeat the ten-minute Release overhead check, close the details window and popover, then run:
 
@@ -97,7 +97,7 @@ The report measures cumulative CPU time, peak physical memory footprint (the sam
 Your account may be unable to read the root collector's footprint directly. In that case, quit the app, launch it with local diagnostics, and supply that snapshot to the reporter:
 
 ```sh
-open "$HOME/Applications/Power Watch.app" --args --background --diagnostics-path "$PWD/build/live-sample.json"
+open "$HOME/Applications/YooTrack.app" --args --background --diagnostics-path "$PWD/build/live-sample.json"
 python3 scripts/measure-overhead.py --seconds 600 --diagnostics build/live-sample.json --output build/overhead-full.json
 ```
 
@@ -113,7 +113,7 @@ Requires Xcode/Swift 6 and Apple silicon; minimum deployment target macOS 15. Th
 /bin/sh scripts/test.sh
 /bin/sh scripts/build.sh
 /bin/sh scripts/install-app.sh
-open "$HOME/Applications/Power Watch.app"
+open "$HOME/Applications/YooTrack.app"
 ```
 
 Alternatively open `PowerWatch.xcodeproj`, select the **PowerWatch** scheme, and build. It contains native app and helper targets, each compiling the shared measurement sources. SwiftPM provides the same shared library, executables, and tests. Regenerate the Xcode project after adding sources with `python3 scripts/generate-xcode-project.py`.
@@ -124,7 +124,7 @@ Development checks:
 .build/release/PowerWatchProbe --load-check
 .build/release/PowerWatchProbe --quit-check
 .build/release/PowerWatchProbe --xpc-check
-/bin/sh scripts/install-helper.sh --validate "$HOME/Applications/Power Watch.app" "$(id -u)"
+/bin/sh scripts/install-helper.sh --validate "$HOME/Applications/YooTrack.app" "$(id -u)"
 ```
 
 The quit check creates disposable fixture apps and verifies normal quit, a cancelled quit, and force quit. The XPC check verifies real signature matching and rejection using an anonymous listener, without installing a system service. Unit tests cover energy/counter math, grouping, battery attribution, history persistence/compaction/retention, plist streams, and process identity checks. The included plist fixtures are representative parser fixtures; live root collection requires administrator setup.
@@ -143,7 +143,7 @@ Selection changes update details immediately; launch context and history follow 
 History shows **Processor share** separately from **Est. drain share**. Processor share compares recorded processor energy across the listed apps, including time plugged in; it excludes GPU and other hardware. Battery drain share is available only for valid battery-only discharge intervals. A message above History explains why the selected range has no usable attribution. Monitor while unplugged and select a range covering that time to collect battery-share estimates.
 
 
-On-request process summaries keep observed launch context separate from AI explanations. If Apple Intelligence is unavailable, fails, or returns an unusable answer, Power Watch shows **Built-in role explanation** with a brief inline notice. Built-in descriptions explain recognized roles; unknown executable purposes remain unidentified.
+On-request process summaries keep observed launch context separate from AI explanations. If Apple Intelligence is unavailable, fails, or returns an unusable answer, YooTrack shows **Built-in role explanation** with a brief inline notice. Built-in descriptions explain recognized roles; unknown executable purposes remain unidentified.
 
 
 ### Repeatable interaction tests

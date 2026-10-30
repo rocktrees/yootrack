@@ -1,4 +1,6 @@
-# Power Watch project status
+# YooTrack project status
+
+> Historical notes: product names and example app paths were updated for the YooTrack rename; the observations below describe earlier builds.
 
 Ongoing performance decisions and experiments are tracked in [optimize.md](optimize.md). Update that file as optimization work progresses.
 
@@ -8,7 +10,7 @@ Updated: 2026-10-11. This is a native, local-only Apple silicon Mac menu bar app
 
 - Menu bar, process/app grouping, details, local history, safe quit/stop controls.
 - Root collector with exact code-signature authentication, administrator install/repair/removal.
-- Installed app: `/Users/josh/Applications/Power Watch.app`; build: `build/Power Watch.app`.
+- Installed app: `/Users/josh/Applications/YooTrack.app`; build: `build/YooTrack.app`.
 - 24 core tests previously passed. Full collector ten-minute Release measurement: 1.841% of one core, app footprint 63.67 MiB, collection footprint 20.50 MiB. CPU target below 1% remains unmet; see VALIDATION.md.
 
 ## Current work
@@ -103,5 +105,5 @@ Missing readings stay unavailable rather than zero. GPU activity is execution ti
 - Added clickable App/name, CPU, Memory, GPU, Network and Power headers to the menu and Live list. A second click reverses direction; the arrow and existing sort picker stay synchronized. Expanded processes follow the same sort. Network uses combined known receive/send traffic. Missing readings stay last in both directions; known zero remains a real reading. Menu ranking stays independent of the details search.
 - Shared comparator tests cover every metric in both directions, unavailable/zero values, deterministic ties, names, combined network rates and individual processes. All 53 core tests pass (build/tests-compact-sort.log).
 - Five native interaction tests passed in build/ui-compact-sort.xcresult (row hit areas, expanded processes, History rows, Live header reversal, tab switching). The initial popup-opening test failed to open the status-item window. The exact QuickMenu view is now hosted in a normal fixture window for deterministic native testing: width and all six headers in both directions pass in build/ui-menu-content.xcresult. This validates popup content, not status-item opening behavior. The fixture window requires both --ui-testing and --test-quick-menu; normal launches are unaffected.
-- Final Release built (build/build-compact-sort-final.log), installed at /Users/josh/Applications/Power Watch.app, and launched normally. Existing history retained; no interaction logging enabled. Live CPU, memory and native GPU readings observed. Collector repair approved by the user and completed on 2026-10-14. Installed signing hash matches the root-owned collector configuration. Relaunched the app to load the final executable identity; authenticated full-process collection resumed. A transient powermetrics proc_pidpath error cleared on a subsequent sample; fresh network rates, CPU hardware power (3.35 W), GPU hardware power (0.80 W) and native process GPU readings were verified. Power Watch’s three monitoring processes appear together. The earlier automatic approval rejection was resolved through explicit user confirmation.
+- Final Release built (build/build-compact-sort-final.log), installed at /Users/josh/Applications/YooTrack.app, and launched normally. Existing history retained; no interaction logging enabled. Live CPU, memory and native GPU readings observed. Collector repair approved by the user and completed on 2026-10-14. Installed signing hash matches the root-owned collector configuration. Relaunched the app to load the final executable identity; authenticated full-process collection resumed. A transient powermetrics proc_pidpath error cleared on a subsequent sample; fresh network rates, CPU hardware power (3.35 W), GPU hardware power (0.80 W) and native process GPU readings were verified. YooTrack’s three monitoring processes appear together. The earlier automatic approval rejection was resolved through explicit user confirmation.
 - Sorting/filtering remains cached outside view bodies; no sampling or collection cadence change. No new background overhead acceptance benchmark; previous CPU target remains unmet.

@@ -93,7 +93,7 @@ enum HistoryRange: String, CaseIterable, Identifiable {
     var helperInstalled: Bool { FileManager.default.fileExists(atPath: PowerWatchConstants.installedHelper) }
     var menuLabel: String {
         if paused { return "Paused" }
-        guard let battery = sample?.battery else { return "Power Watch" }
+        guard let battery = sample?.battery else { return "YooTrack" }
         let level = "\(Int(battery.percentage.rounded()))%"
         if let watts = battery.dischargeWatts { return "\(level) · \(String(format: "%.1f", watts)) W" }
         return level + (battery.charging ? " · Charging" : battery.onBattery ? "" : " · AC")
@@ -114,10 +114,13 @@ enum HistoryRange: String, CaseIterable, Identifiable {
                 ledger = try LedgerStore(url: historyURL.deletingLastPathComponent().appendingPathComponent("ledger.sqlite"))
             } else {
                 let base = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-                store = try HistoryStore(url: base.appendingPathComponent("Power Watch/history.sqlite"))
-                ledger = try LedgerStore(url: base.appendingPathComponent("Power Watch/ledger.sqlite"))
+                let otherInstanceRunning = NSRunningApplication.runningApplications(withBundleIdentifier: PowerWatchConstants.appIdentifier)
+                    .contains { $0.processIdentifier != getpid() && !$0.isTerminated }
+                let dataDirectory = try DataDirectory.prepare(in: base, allowLegacyMigration: !otherInstanceRunning)
+                store = try HistoryStore(url: dataDirectory.appendingPathComponent("history.sqlite"))
+                ledger = try LedgerStore(url: dataDirectory.appendingPathComponent("ledger.sqlite"))
             }
-        } catch { errorMessage = "History storage: \(error.localizedDescription)" }
+        } catch { errorMessage = "Local storage: \(error.localizedDescription)" }
         if let data = UserDefaults.standard.data(forKey: ProviderSettings.defaultsKey), let decoded = try? JSONDecoder().decode(ProviderSettings.self, from: data) {
             providerSettings = decoded
         }
@@ -376,7 +379,7 @@ enum HistoryRange: String, CaseIterable, Identifiable {
     }
     func setLaunchAtLogin(_ enabled: Bool) {
         do { if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }; launchAtLogin = SMAppService.mainApp.status == .enabled
-            if enabled && !launchAtLogin { statusMessage = "Allow Power Watch in System Settings → General → Login Items."; SMAppService.openSystemSettingsLoginItems() }
+            if enabled && !launchAtLogin { statusMessage = "Allow YooTrack in System Settings → General → Login Items."; SMAppService.openSystemSettingsLoginItems() }
         } catch { errorMessage = error.localizedDescription; launchAtLogin = SMAppService.mainApp.status == .enabled }
     }
     func focusProvider(_ id: String?) {

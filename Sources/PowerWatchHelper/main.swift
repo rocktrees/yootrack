@@ -64,5 +64,5 @@ do {
     listener.delegate = delegate; listener.resume()
     RunLoop.current.run()
 } catch {
-    FileHandle.standardError.write(Data("Power Watch collector: \(error.localizedDescription)\n".utf8)); exit(1)
+    FileHandle.standardError.write(Data("YooTrack collector: \(error.localizedDescription)\n".utf8)); exit(1)
 }

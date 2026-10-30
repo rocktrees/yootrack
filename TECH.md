@@ -1,14 +1,14 @@
 # Technology
 
-Power Watch is a native Apple silicon menu bar app. macOS 15 or later. Swift tools 6, Swift language mode 5. No third-party runtime packages.
+YooTrack is a native Apple silicon menu bar app. macOS 15 or later. Swift tools 6, Swift language mode 5. No third-party runtime packages.
 
 | Piece | Used for |
 | --- | --- |
 | SwiftUI and AppKit | Menu bar window, details window, settings |
 | libproc, IOKit | Process, energy, and GPU counters |
 | powermetrics via the privileged helper | Energy Impact, network rates, hardware watts |
-| SQLite | `~/Library/Application Support/Power Watch/history.sqlite` for battery history, mode inherited from the app. `ledger.sqlite` in the same folder is mode `0600` and holds spending, budgets, and holdings. Read-only open of Cursor's `state.vscdb` for `cursorAuth/accessToken` when the CLI keychain item is missing |
-| Security / Keychain | Optional provider overrides, service `ai.powerwatch.providers`. Money uses a separate service, `ai.powerwatch.ledger`, for the Plaid client ID, secret, access tokens, and an optional Jev key. Power Watch does not read other apps' keychain items |
+| SQLite | `~/Library/Application Support/YooTrack/history.sqlite` for battery history, mode inherited from the app. `ledger.sqlite` in the same folder is mode `0600` and holds spending, budgets, and holdings. Read-only open of Cursor's `state.vscdb` for `cursorAuth/accessToken` when the CLI keychain item is missing |
+| Security / Keychain | Optional provider overrides, service `ai.powerwatch.providers`. Money uses a separate service, `ai.powerwatch.ledger`, for the Plaid client ID, secret, access tokens, and an optional Jev key. YooTrack does not read other apps' keychain items |
 | UserDefaults | `ai.powerwatch.providerSettings`: monthly USD budgets and manual allowances. Secrets are not stored here |
 | URLSession | Provider usage requests, and Plaid or Jev only after the user saves those credentials. Cache is bypassed. Plaid and Jev errors omit response bodies |
 | Foundation Models | On-device process summaries when the user asks, using live process identity, git project folder, working directory, parent/child process tree, and CPU/memory/power telemetry. No cloud model fallback |
