@@ -1,6 +1,6 @@
 # Security review — October 30, 2026
 
-Scope: source, scripts, packaging, local storage, process inspection, provider and financial network code, and a pattern-based scan of non-build workspace files. This is a source review, not an independent penetration test. The workspace has no Git repository metadata, so commit history, existing tracked files, and a future GitHub repository's settings could not be inspected. No live credentials, bank connections, or privileged installation were tested.
+Scope: source, scripts, packaging, local storage, process inspection, provider and financial network code, and a pattern-based scan of non-build workspace files. This is a source review, not an independent penetration test. At the time of this review, the workspace had no Git repository metadata, so commit history, tracked files, and GitHub repository settings were not inspected. No live credentials, bank connections, or privileged installation were tested.
 
 ## Fixes made during this review
 
