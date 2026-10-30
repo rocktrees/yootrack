@@ -1,8 +1,8 @@
 # YooTrack
 
-**See what is using your Mac’s battery, processor, memory, network, and GPU—right from the menu bar.**
+**The things you want to keep track of, together and close at hand.**
 
-YooTrack is a native macOS app for exploring what is running on your Mac and how its activity changes over time. It also shows available AI service usage and includes an optional personal money dashboard.
+YooTrack is an opinionated tracking app for macOS that brings useful information into one easy-to-reach place. Today, it helps you keep an eye on your Mac’s power and hardware, AI service usage, and personal finances. It’s designed to grow with more useful things to track, while keeping the information you care about quick to find.
 
 > **Early-stage software:** YooTrack can automatically read locally available Cursor, Codex, and Claude credentials and usage logs to check usage. Its optional full collector requires administrator access and has known security limitations. Read the [disclaimer](DISCLAIMER.md) and [security audit](SECURITY_AUDIT.md) before installing or connecting sensitive accounts.
 
