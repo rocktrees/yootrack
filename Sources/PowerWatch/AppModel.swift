@@ -360,9 +360,15 @@ enum HistoryRange: String, CaseIterable, Identifiable {
         refreshHistory(includeOverview: false)
     }
     func icon(for app: AppUsage) -> NSImage {
-        let key = app.bundlePath ?? (app.id == PowerWatchConstants.monitorGroup ? "symbol:monitor" : "symbol:process")
+        icon(bundlePath: app.bundlePath, id: app.id, name: app.name)
+    }
+    func icon(for row: HistoryRow) -> NSImage {
+        icon(bundlePath: row.bundlePath, id: row.id, name: row.name)
+    }
+    private func icon(bundlePath: String?, id: String, name: String) -> NSImage {
+        let key = bundlePath ?? (id == PowerWatchConstants.monitorGroup ? "symbol:monitor" : "symbol:process")
         if let cached = icons[key] { return cached }
-        let source = app.bundlePath.map { NSWorkspace.shared.icon(forFile: $0) } ?? NSImage(systemSymbolName: app.id == PowerWatchConstants.monitorGroup ? "bolt.circle.fill" : "gearshape", accessibilityDescription: app.name)!
+        let source = bundlePath.flatMap { FileManager.default.fileExists(atPath: $0) ? NSWorkspace.shared.icon(forFile: $0) : nil } ?? NSImage(systemSymbolName: id == PowerWatchConstants.monitorGroup ? "bolt.circle.fill" : "gearshape", accessibilityDescription: name)!
         let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 64, pixelsHigh: 64, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
         NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
         source.draw(in: NSRect(x: 0, y: 0, width: 64, height: 64)); NSGraphicsContext.restoreGraphicsState()

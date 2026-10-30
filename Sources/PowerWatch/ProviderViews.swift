@@ -131,17 +131,30 @@ struct ProviderList: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(model.providers) { provider in
                         Button { model.selectedProvider = provider.id } label: {
+                            let windows = provider.rateWindows.isEmpty ? provider.windows : provider.rateWindows
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack {
                                     Text(provider.name).fontWeight(.medium).lineLimit(1)
                                     Spacer()
-                                    Text(ProviderDisplay.remaining(provider)).font(.caption).monospacedDigit()
+                                    if windows.isEmpty { Text(ProviderDisplay.remaining(provider)).font(.caption).monospacedDigit() }
                                 }
-                                Text(ProviderDisplay.rates(provider)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                                ForEach(ProviderDisplay.resets(provider.rateWindows), id: \.self) { line in
+                                if windows.isEmpty {
+                                    Text(provider.source).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                                ForEach(windows) { window in
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            Text(window.label).foregroundStyle(.secondary)
+                                            Spacer()
+                                            Text(ProviderDisplay.left(window)).monospacedDigit()
+                                        }.font(.caption2)
+                                        RemainingBar(percent: window.percentRemaining)
+                                            .accessibilityIdentifier("provider.window." + provider.id + "." + window.id)
+                                    }
+                                }
+                                ForEach(ProviderDisplay.resets(windows), id: \.self) { line in
                                     Text(line).font(.caption2).foregroundStyle(.secondary)
                                 }
-                                RemainingBar(percent: provider.headline?.percentRemaining)
                             }.padding(10).background(model.selectedProvider == provider.id ? Color.teal.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 8))
                         }.buttonStyle(FullRowButtonStyle()).accessibilityIdentifier("provider.row." + provider.id)
                         Divider()

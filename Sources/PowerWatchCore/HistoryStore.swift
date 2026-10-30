@@ -10,12 +10,26 @@ public struct HistoryRow: Identifiable, Sendable {
     public var lossPoints: Double
     public var observedSeconds: Double
     public var shareOfDrain: Double?
+    /// Time-weighted average of the available relative Energy Impact samples.
+    public var averageImpact: Double? = nil
+    public var energyAvailable: Bool = true
     /// Processor power over the observed time. This includes intervals on external power.
     public var averageWatts: Double { observedSeconds > 0 ? joules / observedSeconds : 0 }
     public init(id: String, name: String, bundlePath: String?, joules: Double, attributedJoules: Double, lossPoints: Double, observedSeconds: Double, shareOfDrain: Double?) {
         self.id = id; self.name = name; self.bundlePath = bundlePath; self.joules = joules
         self.attributedJoules = attributedJoules; self.lossPoints = lossPoints; self.observedSeconds = observedSeconds; self.shareOfDrain = shareOfDrain
     }
+}
+public struct BatteryHistoryPoint: Identifiable, Sendable {
+    public var timestamp: Date
+    public var percentage: Double
+    public var charging: Bool
+    public var id: Date { timestamp }
+}
+public struct BatteryDailyLoss: Identifiable, Sendable {
+    public var day: Date
+    public var points: Double
+    public var id: Date { day }
 }
 public struct HistoryPoint: Identifiable, Sendable {
     public var timestamp: Date
@@ -28,6 +42,8 @@ public struct HistoryPoint: Identifiable, Sendable {
 public struct HistorySummary: Sendable {
     public var rows: [HistoryRow]
     public var points: [HistoryPoint]
+    public var batteryPoints: [BatteryHistoryPoint] = []
+    public var dailyLoss: [BatteryDailyLoss] = []
     public var batteryJoules: Double
     public var batteryLossPoints: Double
     public var validBatteryJoules: Double
@@ -73,6 +89,9 @@ public final class HistoryStore: @unchecked Sendable {
         CREATE TABLE IF NOT EXISTS usage(bucket INTEGER NOT NULL, resolution INTEGER NOT NULL, key TEXT NOT NULL, seconds REAL NOT NULL, joules REAL NOT NULL, attributed REAL NOT NULL, points REAL NOT NULL, covered_start REAL NOT NULL, covered_end REAL NOT NULL, PRIMARY KEY(bucket,resolution,key));
         CREATE INDEX IF NOT EXISTS usage_key_time ON usage(key,bucket);
         CREATE TABLE IF NOT EXISTS system(bucket INTEGER NOT NULL, resolution INTEGER NOT NULL, seconds REAL NOT NULL, battery REAL NOT NULL, loss REAL NOT NULL, valid_battery REAL NOT NULL, remainder REAL NOT NULL, remainder_points REAL NOT NULL, valid_seconds REAL NOT NULL, covered_start REAL NOT NULL, covered_end REAL NOT NULL, PRIMARY KEY(bucket,resolution));
+        CREATE TABLE IF NOT EXISTS impact_history(bucket INTEGER NOT NULL, resolution INTEGER NOT NULL, key TEXT NOT NULL, impact_seconds REAL NOT NULL, seconds REAL NOT NULL, covered_start REAL NOT NULL, covered_end REAL NOT NULL, PRIMARY KEY(bucket,resolution,key));
+        CREATE INDEX IF NOT EXISTS impact_key_time ON impact_history(key,bucket);
+        CREATE TABLE IF NOT EXISTS battery_history(bucket INTEGER NOT NULL, resolution INTEGER NOT NULL, percent_seconds REAL NOT NULL, seconds REAL NOT NULL, charging_seconds REAL NOT NULL, covered_start REAL NOT NULL, covered_end REAL NOT NULL, PRIMARY KEY(bucket,resolution));
         """)
         for table in ["usage", "system"] {
             let info = try statement("PRAGMA table_info(\(table))"); var names: Set<String> = []
@@ -126,7 +145,18 @@ public final class HistoryStore: @unchecked Sendable {
             }
             let row = try statement("INSERT INTO usage VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(bucket,resolution,key) DO UPDATE SET seconds=seconds+excluded.seconds,joules=joules+excluded.joules,attributed=attributed+excluded.attributed,points=points+excluded.points,covered_start=MIN(covered_start,excluded.covered_start),covered_end=MAX(covered_end,excluded.covered_end)")
             let system = try statement("INSERT INTO system VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(bucket,resolution) DO UPDATE SET seconds=seconds+excluded.seconds,battery=battery+excluded.battery,loss=loss+excluded.loss,valid_battery=valid_battery+excluded.valid_battery,remainder=remainder+excluded.remainder,remainder_points=remainder_points+excluded.remainder_points,valid_seconds=valid_seconds+excluded.valid_seconds,covered_start=MIN(covered_start,excluded.covered_start),covered_end=MAX(covered_end,excluded.covered_end)")
-            defer { sqlite3_finalize(row); sqlite3_finalize(system) }
+            let impact = try statement("INSERT INTO impact_history VALUES(?,?,?,?,?,?,?) ON CONFLICT(bucket,resolution,key) DO UPDATE SET impact_seconds=impact_seconds+excluded.impact_seconds,seconds=seconds+excluded.seconds,covered_start=MIN(covered_start,excluded.covered_start),covered_end=MAX(covered_end,excluded.covered_end)")
+            let battery = try statement("INSERT INTO battery_history VALUES(?,?,?,?,?,?,?) ON CONFLICT(bucket,resolution) DO UPDATE SET percent_seconds=percent_seconds+excluded.percent_seconds,seconds=seconds+excluded.seconds,charging_seconds=charging_seconds+excluded.charging_seconds,covered_start=MIN(covered_start,excluded.covered_start),covered_end=MAX(covered_end,excluded.covered_end)")
+            defer { sqlite3_finalize(row); sqlite3_finalize(system); sqlite3_finalize(impact); sqlite3_finalize(battery) }
+            let groupMembers = Dictionary(grouping: interval.processes, by: \.groupKey)
+            let knownImpact: (ProcessUsage) -> Double? = { p in
+                guard let value = p.reading.energyImpact, value.isFinite, value >= 0 else { return nil }; return value
+            }
+            var impacts: [(String, Double)] = interval.processes.compactMap { p in knownImpact(p).map { ("pid:" + p.id.key, $0) } }
+            impacts += groupMembers.compactMap { key, members in
+                let values = members.compactMap(knownImpact)
+                return values.isEmpty ? nil : (key, values.reduce(0, +))
+            }
             var cursor = interval.start.timeIntervalSince1970
             let end = interval.end.timeIntervalSince1970
             while cursor < end {
@@ -135,7 +165,6 @@ public final class HistoryStore: @unchecked Sendable {
                 let next = min(end, Double(bucket + resolution))
                 let fraction = (next - cursor) / (end - interval.start.timeIntervalSince1970)
                 let seconds = interval.seconds * fraction
-                let groupMembers = Dictionary(grouping: interval.processes, by: \.groupKey)
                 var energyRows: [(String, Double)] = interval.processes.compactMap { p in p.joules.map { ("pid:" + p.id.key, $0) } }
                 energyRows += groupMembers.map { ($0.key, $0.value.compactMap(\.joules).reduce(0, +)) }
                 for (key, energy) in energyRows where energy > 0 {
@@ -150,7 +179,18 @@ public final class HistoryStore: @unchecked Sendable {
                 sqlite3_reset(system); sqlite3_clear_bindings(system); sqlite3_bind_int64(system, 1, bucket); sqlite3_bind_int64(system, 2, resolution)
                 let values = [seconds, (interval.batteryJoules ?? 0) * fraction, (interval.batteryLossPoints ?? 0) * fraction, interval.attributionValid ? (interval.batteryJoules ?? 0) * fraction : 0, remainder * fraction, remainderPoints * fraction, interval.attributionValid ? seconds : 0, cursor, next]
                 for (index, value) in values.enumerated() { sqlite3_bind_double(system, Int32(index + 3), value) }
-                try step(system); cursor = next
+                try step(system)
+                for (key, value) in impacts {
+                    sqlite3_reset(impact); sqlite3_clear_bindings(impact); sqlite3_bind_int64(impact, 1, bucket); sqlite3_bind_int64(impact, 2, resolution); bind(key, to: impact, at: 3)
+                    for (index, value) in [value * seconds, seconds, cursor, next].enumerated() { sqlite3_bind_double(impact, Int32(index + 4), value) }
+                    try step(impact)
+                }
+                if let snapshot = interval.batterySnapshot, snapshot.percentage.isFinite, (0...100).contains(snapshot.percentage) {
+                    sqlite3_reset(battery); sqlite3_clear_bindings(battery); sqlite3_bind_int64(battery, 1, bucket); sqlite3_bind_int64(battery, 2, resolution)
+                    for (index, value) in [snapshot.percentage * seconds, seconds, snapshot.charging ? seconds : 0, cursor, next].enumerated() { sqlite3_bind_double(battery, Int32(index + 3), value) }
+                    try step(battery)
+                }
+                cursor = next
             }
             try exec("COMMIT"); metadataCache.merge(pendingMetadata) { _, new in new }
             processMetadataCache.merge(pendingProcessMetadata) { _, new in new }
@@ -165,6 +205,7 @@ public final class HistoryStore: @unchecked Sendable {
         let system = try statement("SELECT bucket,resolution,seconds,battery,loss,valid_battery,remainder,remainder_points,valid_seconds,covered_start,covered_end FROM system WHERE bucket+resolution>? AND bucket<? ORDER BY bucket")
         defer { sqlite3_finalize(system) }
         sqlite3_bind_double(system, 1, startTime); sqlite3_bind_double(system, 2, endTime)
+        var dailyLoss: [Date: Double] = [:]
         while sqlite3_step(system) == SQLITE_ROW {
             let a = sqlite3_column_double(system, 9), b = sqlite3_column_double(system, 10)
             let factor = b > a ? max(0, min(endTime, b) - max(startTime, a)) / (b - a) : 0
@@ -175,7 +216,12 @@ public final class HistoryStore: @unchecked Sendable {
             result.remainderJoules += sqlite3_column_double(system, 6) * factor
             result.remainderPoints += sqlite3_column_double(system, 7) * factor
             result.attributionSeconds += sqlite3_column_double(system, 8) * factor
+            if factor > 0, sqlite3_column_double(system, 3) > 0 {
+                let day = Calendar.current.startOfDay(for: Date(timeIntervalSince1970: max(startTime, a)))
+                dailyLoss[day, default: 0] += sqlite3_column_double(system, 4) * factor
+            }
         }
+        result.dailyLoss = dailyLoss.map { BatteryDailyLoss(day: $0.key, points: $0.value) }.sorted { $0.day < $1.day }
         let filter = group != nil ? "e.kind='process' AND e.parent=?" : (entity == nil ? "e.kind='group'" : "u.key=?")
         let rows = try statement("SELECT u.bucket,u.resolution,u.key,e.name,e.bundle,u.seconds,u.joules,u.attributed,u.points,u.covered_start,u.covered_end FROM usage u JOIN entities e ON e.key=u.key WHERE u.bucket+u.resolution>? AND u.bucket<? AND \(filter) ORDER BY u.bucket")
         defer { sqlite3_finalize(rows) }
@@ -195,14 +241,44 @@ public final class HistoryStore: @unchecked Sendable {
             var point = points[date] ?? HistoryPoint(timestamp: date, joules: 0, seconds: 0)
             point.joules += joules; point.seconds = max(point.seconds, seconds); points[date] = point
         }
-        result.rows = aggregate.values.map { value in var row = value; row.shareOfDrain = result.validBatteryJoules > 0 ? row.attributedJoules / result.validBatteryJoules * 100 : nil; return row }.sorted { $0.joules > $1.joules }
+        let impactRows = try statement("SELECT i.key,e.name,e.bundle,i.impact_seconds,i.seconds,i.covered_start,i.covered_end FROM impact_history i JOIN entities e ON e.key=i.key WHERE i.bucket+i.resolution>? AND i.bucket<? AND \(filter.replacingOccurrences(of: "u.key", with: "i.key"))")
+        defer { sqlite3_finalize(impactRows) }
+        sqlite3_bind_double(impactRows, 1, startTime); sqlite3_bind_double(impactRows, 2, endTime)
+        if let group { bind(group, to: impactRows, at: 3) } else if let entity { bind(entity, to: impactRows, at: 3) }
+        var impactTotals: [String: (Double, Double)] = [:]
+        while sqlite3_step(impactRows) == SQLITE_ROW {
+            let a = sqlite3_column_double(impactRows, 5), b = sqlite3_column_double(impactRows, 6)
+            let factor = b > a ? max(0, min(endTime, b) - max(startTime, a)) / (b - a) : 0
+            guard factor > 0 else { continue }
+            let key = text(impactRows, 0)
+            if aggregate[key] == nil {
+                var value = HistoryRow(id: key, name: text(impactRows, 1), bundlePath: sqlite3_column_type(impactRows, 2) == SQLITE_NULL ? nil : text(impactRows, 2), joules: 0, attributedJoules: 0, lossPoints: 0, observedSeconds: 0, shareOfDrain: nil)
+                value.energyAvailable = false; aggregate[key] = value
+            }
+            let old = impactTotals[key] ?? (0, 0)
+            impactTotals[key] = (old.0 + sqlite3_column_double(impactRows, 3) * factor, old.1 + sqlite3_column_double(impactRows, 4) * factor)
+        }
+        result.rows = aggregate.values.map { value in
+            var row = value
+            row.shareOfDrain = row.energyAvailable && result.validBatteryJoules > 0 ? row.attributedJoules / result.validBatteryJoules * 100 : nil
+            if let total = impactTotals[row.id], total.1 > 0 { row.averageImpact = total.0 / total.1 }
+            return row
+        }.sorted { $0.joules > $1.joules }
         result.points = points.values.sorted { $0.timestamp < $1.timestamp }
+        let battery = try statement("SELECT bucket,percent_seconds,seconds,charging_seconds,covered_start,covered_end FROM battery_history WHERE bucket+resolution>? AND bucket<? ORDER BY bucket")
+        defer { sqlite3_finalize(battery) }
+        sqlite3_bind_double(battery, 1, startTime); sqlite3_bind_double(battery, 2, endTime)
+        while sqlite3_step(battery) == SQLITE_ROW {
+            let seconds = sqlite3_column_double(battery, 2), a = sqlite3_column_double(battery, 4), b = sqlite3_column_double(battery, 5)
+            guard seconds > 0, min(endTime, b) > max(startTime, a) else { continue }
+            result.batteryPoints.append(BatteryHistoryPoint(timestamp: Date(timeIntervalSince1970: max(startTime, a)), percentage: sqlite3_column_double(battery, 1) / seconds, charging: sqlite3_column_double(battery, 3) > 0))
+        }
         let earliest = try statement("SELECT MIN(bucket) FROM system"); defer { sqlite3_finalize(earliest) }
         if sqlite3_step(earliest) == SQLITE_ROW, sqlite3_column_type(earliest, 0) != SQLITE_NULL { result.availableSince = Date(timeIntervalSince1970: sqlite3_column_double(earliest, 0)) }
         return result
     }
     public func clear() throws {
-        lock.lock(); defer { lock.unlock() }; try exec("DELETE FROM usage; DELETE FROM system; DELETE FROM entities; PRAGMA wal_checkpoint(TRUNCATE); VACUUM;"); metadataCache.removeAll(); processMetadataCache.removeAll(); fineCutover = -Double.infinity
+        lock.lock(); defer { lock.unlock() }; try exec("DELETE FROM usage; DELETE FROM system; DELETE FROM impact_history; DELETE FROM battery_history; DELETE FROM entities; PRAGMA wal_checkpoint(TRUNCATE); VACUUM;"); metadataCache.removeAll(); processMetadataCache.removeAll(); fineCutover = -Double.infinity
     }
     public func maintain(now: Date, byteLimit: Int64 = 250 * 1024 * 1024) throws {
         lock.lock(); defer { lock.unlock() }
@@ -216,15 +292,27 @@ public final class HistoryStore: @unchecked Sendable {
             ON CONFLICT(bucket,resolution,key) DO UPDATE SET seconds=seconds+excluded.seconds,joules=joules+excluded.joules,attributed=attributed+excluded.attributed,points=points+excluded.points,covered_start=MIN(covered_start,excluded.covered_start),covered_end=MAX(covered_end,excluded.covered_end);
             INSERT INTO system SELECT bucket-(bucket%60),60,SUM(seconds),SUM(battery),SUM(loss),SUM(valid_battery),SUM(remainder),SUM(remainder_points),SUM(valid_seconds),MIN(covered_start),MAX(covered_end) FROM system WHERE resolution=15 AND bucket+15<=\(fineBoundary) GROUP BY bucket-(bucket%60)
             ON CONFLICT(bucket,resolution) DO UPDATE SET seconds=seconds+excluded.seconds,battery=battery+excluded.battery,loss=loss+excluded.loss,valid_battery=valid_battery+excluded.valid_battery,remainder=remainder+excluded.remainder,remainder_points=remainder_points+excluded.remainder_points,valid_seconds=valid_seconds+excluded.valid_seconds,covered_start=MIN(covered_start,excluded.covered_start),covered_end=MAX(covered_end,excluded.covered_end);
+            INSERT INTO impact_history SELECT bucket-(bucket%60),60,key,SUM(impact_seconds),SUM(seconds),MIN(covered_start),MAX(covered_end) FROM impact_history WHERE resolution=15 AND bucket+15<=\(fineBoundary) GROUP BY bucket-(bucket%60),key
+            ON CONFLICT(bucket,resolution,key) DO UPDATE SET impact_seconds=impact_seconds+excluded.impact_seconds,seconds=seconds+excluded.seconds,covered_start=MIN(covered_start,excluded.covered_start),covered_end=MAX(covered_end,excluded.covered_end);
+            INSERT INTO battery_history SELECT bucket-(bucket%60),60,SUM(percent_seconds),SUM(seconds),SUM(charging_seconds),MIN(covered_start),MAX(covered_end) FROM battery_history WHERE resolution=15 AND bucket+15<=\(fineBoundary) GROUP BY bucket-(bucket%60)
+            ON CONFLICT(bucket,resolution) DO UPDATE SET percent_seconds=percent_seconds+excluded.percent_seconds,seconds=seconds+excluded.seconds,charging_seconds=charging_seconds+excluded.charging_seconds,covered_start=MIN(covered_start,excluded.covered_start),covered_end=MAX(covered_end,excluded.covered_end);
             DELETE FROM usage WHERE resolution=15 AND bucket+15<=\(fineBoundary);
             DELETE FROM system WHERE resolution=15 AND bucket+15<=\(fineBoundary);
+            DELETE FROM impact_history WHERE resolution=15 AND bucket+15<=\(fineBoundary);
+            DELETE FROM battery_history WHERE resolution=15 AND bucket+15<=\(fineBoundary);
             INSERT INTO usage SELECT bucket-(bucket%300),300,key,SUM(seconds),SUM(joules),SUM(attributed),SUM(points),MIN(covered_start),MAX(covered_end) FROM usage WHERE resolution=60 AND bucket+60<\(old) GROUP BY bucket-(bucket%300),key
             ON CONFLICT(bucket,resolution,key) DO UPDATE SET seconds=seconds+excluded.seconds,joules=joules+excluded.joules,attributed=attributed+excluded.attributed,points=points+excluded.points,covered_start=MIN(covered_start,excluded.covered_start),covered_end=MAX(covered_end,excluded.covered_end);
             INSERT INTO system SELECT bucket-(bucket%300),300,SUM(seconds),SUM(battery),SUM(loss),SUM(valid_battery),SUM(remainder),SUM(remainder_points),SUM(valid_seconds),MIN(covered_start),MAX(covered_end) FROM system WHERE resolution=60 AND bucket+60<\(old) GROUP BY bucket-(bucket%300)
             ON CONFLICT(bucket,resolution) DO UPDATE SET seconds=seconds+excluded.seconds,battery=battery+excluded.battery,loss=loss+excluded.loss,valid_battery=valid_battery+excluded.valid_battery,remainder=remainder+excluded.remainder,remainder_points=remainder_points+excluded.remainder_points,valid_seconds=valid_seconds+excluded.valid_seconds,covered_start=MIN(covered_start,excluded.covered_start),covered_end=MAX(covered_end,excluded.covered_end);
+            INSERT INTO impact_history SELECT bucket-(bucket%300),300,key,SUM(impact_seconds),SUM(seconds),MIN(covered_start),MAX(covered_end) FROM impact_history WHERE resolution=60 AND bucket+60<\(old) GROUP BY bucket-(bucket%300),key
+            ON CONFLICT(bucket,resolution,key) DO UPDATE SET impact_seconds=impact_seconds+excluded.impact_seconds,seconds=seconds+excluded.seconds,covered_start=MIN(covered_start,excluded.covered_start),covered_end=MAX(covered_end,excluded.covered_end);
+            INSERT INTO battery_history SELECT bucket-(bucket%300),300,SUM(percent_seconds),SUM(seconds),SUM(charging_seconds),MIN(covered_start),MAX(covered_end) FROM battery_history WHERE resolution=60 AND bucket+60<\(old) GROUP BY bucket-(bucket%300)
+            ON CONFLICT(bucket,resolution) DO UPDATE SET percent_seconds=percent_seconds+excluded.percent_seconds,seconds=seconds+excluded.seconds,charging_seconds=charging_seconds+excluded.charging_seconds,covered_start=MIN(covered_start,excluded.covered_start),covered_end=MAX(covered_end,excluded.covered_end);
             DELETE FROM usage WHERE (resolution=60 AND bucket+60<\(old)) OR bucket+resolution<\(oldest);
             DELETE FROM system WHERE (resolution=60 AND bucket+60<\(old)) OR bucket+resolution<\(oldest);
-            DELETE FROM entities WHERE key NOT IN (SELECT DISTINCT key FROM usage);
+            DELETE FROM impact_history WHERE (resolution=60 AND bucket+60<\(old)) OR bucket+resolution<\(oldest);
+            DELETE FROM battery_history WHERE (resolution=60 AND bucket+60<\(old)) OR bucket+resolution<\(oldest);
+            DELETE FROM entities WHERE key NOT IN (SELECT key FROM usage UNION SELECT key FROM impact_history);
             COMMIT;
             """)
         } catch { try? exec("ROLLBACK"); throw error }
@@ -238,7 +326,7 @@ public final class HistoryStore: @unchecked Sendable {
             let minimum = try statement("SELECT MIN(bucket) FROM system")
             guard sqlite3_step(minimum) == SQLITE_ROW, sqlite3_column_type(minimum, 0) != SQLITE_NULL else { sqlite3_finalize(minimum); break }
             let cutoff = sqlite3_column_int64(minimum, 0) + 21600; sqlite3_finalize(minimum)
-            try exec("DELETE FROM usage WHERE bucket<\(cutoff); DELETE FROM system WHERE bucket<\(cutoff); DELETE FROM entities WHERE key NOT IN (SELECT DISTINCT key FROM usage); PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")
+            try exec("DELETE FROM usage WHERE bucket<\(cutoff); DELETE FROM system WHERE bucket<\(cutoff); DELETE FROM impact_history WHERE bucket<\(cutoff); DELETE FROM battery_history WHERE bucket<\(cutoff); DELETE FROM entities WHERE key NOT IN (SELECT key FROM usage UNION SELECT key FROM impact_history); PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")
         }
         metadataCache.removeAll()
         processMetadataCache.removeAll()

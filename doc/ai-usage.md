@@ -2,6 +2,8 @@
 
 [← Back to the README](../README.md)
 
+The AI Usage list shows each available usage window separately. For example, Cursor's in-house and third-party allowances have individual bars and remaining amounts, so one exhausted allowance does not make the others appear exhausted. Bars fill with the amount used; spending caps and monthly budgets remain in the provider detail when rate windows are available.
+
 YooTrack can show usage windows, remaining allowances, and reset times for Cursor, Anthropic, and OpenAI/Codex, along with allowances you enter yourself. The menu bar gives a quick view; open **AI Usage** in the details window for each provider’s available information and settings.
 
 ## Important privacy detail

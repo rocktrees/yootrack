@@ -9,6 +9,8 @@ enum Display {
     static func watts(_ value: Double?) -> String { value.map { String(format: "%.2f W", $0) } ?? "—" }
     static func decimal(_ value: Double?, suffix: String = "") -> String { value.map { String(format: "%.1f", $0) + suffix } ?? "—" }
     static func energy(_ joules: Double) -> String { String(format: "%.3f Wh", joules / 3600) }
+    /// Percentage points of battery charge are numerically equal to percent of a full charge.
+    static func batteryUsed(_ value: Double) -> String { String(format: "%.2f%%", value) }
     static func rate(_ value: Double?) -> String {
         guard let value, value.isFinite, value >= 0 else { return "—" }
         if value == 0 { return "0 B/s" }
@@ -138,6 +140,10 @@ struct QuickMenu: View {
             if model.historyRange == .custom {
                 VStack(alignment: .leading) { DatePicker("From", selection: $model.customStart); DatePicker("To", selection: $model.customEnd) }.font(.caption)
             }
+            if model.history.batteryJoules > 0 {
+                Text("Battery used: " + Display.batteryUsed(model.history.batteryLossPoints) + String(format: " · Attribution coverage: %.0f%%", model.history.attributionCoverage * 100))
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
             HStack {
                 Text("App / process").frame(maxWidth: .infinity, alignment: .leading)
                 Text("Avg power").frame(width: 76, alignment: .trailing)
@@ -160,10 +166,11 @@ struct QuickMenu: View {
                                 model.openDetails()
                             } label: {
                                 HStack {
+                                    Image(nsImage: model.icon(for: row)).resizable().frame(width: 20, height: 20).accessibilityHidden(true)
                                     Text(row.name).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).help(row.name)
-                                    Text(Display.watts(row.averageWatts)).frame(width: 76, alignment: .trailing)
-                                    Text(Display.energy(row.joules)).frame(width: 76, alignment: .trailing)
-                                    Text(Display.decimal(total > 0 ? row.joules / total * 100 : nil, suffix: "%")).frame(width: 60, alignment: .trailing)
+                                    Text(row.energyAvailable ? Display.watts(row.averageWatts) : "—").frame(width: 76, alignment: .trailing)
+                                    Text(row.energyAvailable ? Display.energy(row.joules) : "—").frame(width: 76, alignment: .trailing)
+                                    Text(Display.decimal(row.energyAvailable && total > 0 ? row.joules / total * 100 : nil, suffix: "%")).frame(width: 60, alignment: .trailing)
                                 }.font(.caption).monospacedDigit().padding(.vertical, 5)
                             }.buttonStyle(FullRowButtonStyle()).accessibilityIdentifier("menu.history." + row.id)
                             Divider()
@@ -171,7 +178,7 @@ struct QuickMenu: View {
                     }
                 }.frame(height: 220)
             }
-            Text("Share is recorded processor energy, including while plugged in. Select an app for details.").font(.caption2).foregroundStyle(.secondary)
+            Text("Share is recorded processor energy, including while plugged in. Open Details for battery estimates and Energy Impact history.").font(.caption2).foregroundStyle(.secondary)
         }
     }
     private func openDetails() {
@@ -468,15 +475,33 @@ struct Dashboard: View {
             HStack { Text("Usage over time").font(.headline); Spacer(); Picker("Period", selection: $model.historyRange) { ForEach(HistoryRange.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 140) }
             attributionStatus(summary, model: model)
             if model.historyRange == .custom { DatePicker("From", selection: $model.customStart); DatePicker("To", selection: $model.customEnd) }
+            if !summary.batteryPoints.isEmpty {
+                Text("Mac battery level").font(.subheadline.bold())
+                Chart(summary.batteryPoints) { point in
+                    PointMark(x: .value("Time", point.timestamp), y: .value("Battery", point.percentage))
+                        .foregroundStyle(point.charging ? Color.green : Color.teal).symbolSize(12)
+                }.chartYScale(domain: 0...100).chartYAxisLabel("Charge · %").frame(height: 120)
+                Text("Green points include charging; gaps mean no recorded samples. Levels are bucket averages.").font(.caption2).foregroundStyle(.secondary)
+            } else if !model.historyLoading {
+                Text("Battery level history begins after this update while YooTrack is monitoring.").font(.caption).foregroundStyle(.secondary)
+            }
+            if summary.dailyLoss.count > 1 {
+                Text("Recorded battery loss by day").font(.subheadline.bold())
+                Chart(summary.dailyLoss) { day in
+                    BarMark(x: .value("Day", day.day, unit: .day), y: .value("Battery loss", day.points)).foregroundStyle(.teal)
+                }.chartYAxisLabel("Battery used · %").frame(height: 120)
+                Text("Days with no usable discharge reading are omitted. Partial days and monitoring gaps can make comparisons incomplete.").font(.caption2).foregroundStyle(.secondary)
+            }
             if model.historyLoading { Text("Loading history…").font(.caption).foregroundStyle(.secondary) }
             else if summary.points.isEmpty { ContentUnavailableView("No recorded activity", systemImage: "chart.xyaxis.line", description: Text("Keep monitoring to build a local history.")).frame(height: 160) }
             else {
                 Chart(summary.points) { point in BarMark(x: .value("Time", point.timestamp), y: .value("Processor energy (Wh)", point.joules / 3600)).foregroundStyle(.teal) }
                     .chartYAxisLabel("Processor energy · Wh").frame(height: 180)
             }
-            HStack { Metric(title: "Processor energy", value: Display.energy(summary.rows.reduce(0) { $0 + $1.joules })); Metric(title: "Observed battery loss", value: String(format: "%.2f percentage points", summary.batteryLossPoints)) }
+            HStack { Metric(title: "Processor energy", value: summary.rows.contains(where: \.energyAvailable) ? Display.energy(summary.rows.reduce(0) { $0 + $1.joules }) : "—"); Metric(title: "Observed battery used", value: summary.batteryJoules > 0 ? Display.batteryUsed(summary.batteryLossPoints) : "—") }
             if model.selected != nil, let row = summary.rows.first {
-                HStack { Metric(title: "Estimated share of drain", value: Display.decimal(row.shareOfDrain, suffix: "%")); Metric(title: "Estimated battery contribution", value: row.shareOfDrain == nil ? "—" : String(format: "%.2f percentage points", row.lossPoints)) }
+                HStack { Metric(title: "Estimated share of drain", value: Display.decimal(row.shareOfDrain, suffix: "%")); Metric(title: "Estimated battery used", value: row.shareOfDrain == nil ? "—" : Display.batteryUsed(row.lossPoints)) }
+                Metric(title: "Average Energy Impact", value: Display.decimal(row.averageImpact))
             } else { Metric(title: "Hardware and unattributed energy", value: summary.validBatteryJoules > 0 ? Display.energy(summary.remainderJoules) : "—") }
             Text("Attribution available for \(Int((summary.attributionCoverage * 100).rounded()))% of monitored time. Shares use battery-only discharge intervals; charging, AC supplementation, and missing data are excluded. Range edges are approximate within stored buckets.").font(.caption).foregroundStyle(.secondary)
         }
@@ -496,6 +521,11 @@ private struct ConsumerBrowser: View {
     @Binding var contentReady: Bool
     @Binding var moneyDraft: MoneyListDraft
     @Binding var providerDraft: ProviderListDraft
+    @State private var historyRanking = HistoryRanking.battery
+    private enum HistoryRanking: String, CaseIterable, Identifiable {
+        case battery = "Battery", impact = "Energy Impact", processor = "Processor"
+        var id: String { rawValue }
+    }
     var body: some View {
         VStack(spacing: 0) {
             Picker("View", selection: Binding(get: { tab }, set: { next in
@@ -550,35 +580,44 @@ private struct ConsumerBrowser: View {
         }
     }
     private var historyList: some View {
-        let processorTotal = model.history.rows.reduce(0) { $0 + $1.joules }
         let liveIDs = Set(model.apps.map(\.id))
         return VStack(alignment: .leading, spacing: 10) {
             Picker("Period", selection: $model.historyRange) { ForEach(HistoryRange.allCases) { Text($0.rawValue).tag($0) } }.padding(.horizontal, 12)
             if model.historyRange == .custom {
                 VStack { DatePicker("From", selection: $model.customStart); DatePicker("To", selection: $model.customEnd) }.font(.caption).padding(.horizontal, 12)
             }
+            HStack {
+                Text("Rank by").font(.caption).foregroundStyle(.secondary)
+                Picker("Rank by", selection: $historyRanking) { ForEach(HistoryRanking.allCases) { Text($0.rawValue).tag($0) } }
+                    .pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("history.ranking")
+            }.padding(.horizontal, 12)
             attributionStatus(model.history, model: model).padding(.horizontal, 12)
             HStack {
+                Text("Battery used: " + (model.history.batteryJoules > 0 ? Display.batteryUsed(model.history.batteryLossPoints) : "—"))
+                Spacer()
+                Text("Unattributed: " + (model.history.validBatteryJoules > 0 ? Display.batteryUsed(model.history.remainderPoints) : "—"))
+            }.font(.caption).monospacedDigit().padding(.horizontal, 16)
+            HStack {
                 Text("App / process").frame(width: 112, alignment: .leading); Spacer()
-                Text("Avg power").frame(width: 88, alignment: .trailing)
-                Text("Energy").frame(width: 88, alignment: .trailing)
-                Text("Share").frame(width: 72, alignment: .trailing)
+                Text("Battery used").frame(width: 100, alignment: .trailing)
+                Text("Avg impact").frame(width: 88, alignment: .trailing)
+                Text("CPU energy").frame(width: 88, alignment: .trailing)
             }.font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 16)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(model.history.rows) { row in
+                    ForEach(rankedHistory) { row in
                         HStack(spacing: 0) {
                             Button { model.toggleHistoryGroup(row.id) } label: {
                                 Image(systemName: model.expandedHistory.contains(row.id) ? "chevron.down" : "chevron.right").font(.caption).frame(width: 22, height: 36)
                             }.buttonStyle(.plain).accessibilityIdentifier("history.expand." + row.id)
-                            Button { model.select(app: row.id) } label: { historyRow(row, shareOf: processorTotal, exited: !liveIDs.contains(row.id)) }
+                            Button { model.select(app: row.id) } label: { historyRow(row, exited: !liveIDs.contains(row.id), showIcon: true) }
                                 .buttonStyle(FullRowButtonStyle()).accessibilityIdentifier("consumer.history." + row.id)
                         }
                         if model.expandedHistory.contains(row.id) {
                             if let members = model.historyMembers[row.id] {
                                 if members.isEmpty { Text("Process energy appears after the next sample.").font(.caption).foregroundStyle(.secondary).padding(.leading, 36) }
                                 ForEach(members) { member in
-                                    historyRow(member, shareOf: row.joules, exited: false).padding(.leading, 28)
+                                    historyRow(member, exited: false, showIcon: false).padding(.leading, 28)
                                 }
                             } else {
                                 Text("Loading processes…").font(.caption).foregroundStyle(.secondary).padding(.leading, 36)
@@ -588,22 +627,38 @@ private struct ConsumerBrowser: View {
                     }
                 }.padding(.horizontal, 12)
             }
-            Text("Average power and energy are processor totals, including time plugged in. Share is each row’s portion of that energy. Battery drain share stays separate and needs battery-only discharge.").font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 12)
+            Text("Battery used is expressed as % of a full charge (80% to 79% is 1%). App estimates and unattributed use cover valid battery-only intervals (\(Int((model.history.attributionCoverage * 100).rounded()))% of monitored time); total battery used can also include other intervals. Display, graphics, shared services and missed activity remain unattributed. Impact averages available samples and may be partial; it is a relative score, not battery use. CPU energy includes plugged-in time. — means unavailable.").font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 12)
             if model.history.rows.isEmpty { Text("History appears after active processes have been observed for a full interval.").font(.caption).foregroundStyle(.secondary).padding() }
             if let since = model.history.availableSince { Text("Stored since \(since.formatted(date: .abbreviated, time: .shortened))").font(.caption2).foregroundStyle(.secondary).padding(12) }
         }
     }
-    private func historyRow(_ row: HistoryRow, shareOf total: Double, exited: Bool) -> some View {
+    private var rankedHistory: [HistoryRow] {
+        model.history.rows.sorted { a, b in
+            func value(_ row: HistoryRow) -> Double? {
+                switch historyRanking {
+                case .battery: return row.shareOfDrain == nil ? nil : row.lossPoints
+                case .impact: return row.averageImpact
+                case .processor: return row.energyAvailable ? row.joules : nil
+                }
+            }
+            let left = value(a), right = value(b)
+            if left != right { return (left ?? -1) > (right ?? -1) }
+            return a.name.localizedStandardCompare(b.name) == .orderedAscending
+        }
+    }
+    private func historyRow(_ row: HistoryRow, exited: Bool, showIcon: Bool) -> some View {
         HStack {
+            if showIcon { Image(nsImage: model.icon(for: row)).resizable().frame(width: 28, height: 28).accessibilityHidden(true) }
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.name).lineLimit(1)
                 if exited { Text("exited").font(.caption2).foregroundStyle(.secondary) }
             }
             Spacer()
-            Text(Display.watts(row.averageWatts)).monospacedDigit().frame(width: 88, alignment: .trailing)
-                .help("Average processor power over the time this process was observed, including while plugged in.")
-            Text(Display.energy(row.joules)).monospacedDigit().frame(width: 88, alignment: .trailing)
-            Text(Display.decimal(total > 0 ? row.joules / total * 100 : nil, suffix: "%")).monospacedDigit().frame(width: 72, alignment: .trailing)
+            Text(row.shareOfDrain == nil ? "—" : Display.batteryUsed(row.lossPoints)).monospacedDigit().frame(width: 100, alignment: .trailing)
+                .help("Estimated percent of a full battery charge used by processor energy during valid battery-only intervals, not the app's share of total drain.")
+            Text(Display.decimal(row.averageImpact)).monospacedDigit().frame(width: 88, alignment: .trailing)
+                .help("Average of available Apple Energy Impact samples, a relative score rather than watts or battery percentage.")
+            Text(row.energyAvailable ? Display.energy(row.joules) : "—").monospacedDigit().frame(width: 88, alignment: .trailing)
         }.padding(.vertical, 8).padding(.horizontal, 4)
             .background(model.selected == row.id ? .teal.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 6))
     }

@@ -94,6 +94,8 @@ public struct UsageInterval: Sendable {
     public var batteryLossPoints: Double?
     public var attributionValid: Bool
     public var issue: String?
+    /// End-of-interval battery snapshot, used for history charts, not attribution.
+    public var batterySnapshot: BatteryReading? = nil
     public var processorJoules: Double { processes.compactMap(\.joules).reduce(0, +) }
     public var remainderJoules: Double? { attributionValid ? batteryJoules.map { max(0, $0 - processorJoules) } : nil }
 }

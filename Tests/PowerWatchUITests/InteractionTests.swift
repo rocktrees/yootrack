@@ -116,6 +116,15 @@ final class InteractionTests: XCTestCase {
         app.radioButtons["Live"].click()
         XCTAssertTrue(app.buttons["consumer.app.fixture-app-000"].waitForExistence(timeout: 5))
     }
+    func testProviderListShowsSeparateUsageWindows() {
+        app.radioButtons["AI Usage"].click()
+        let row = app.buttons["provider.row.cursor"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(row.staticTexts["In-house"].exists)
+        XCTAssertTrue(row.staticTexts["36% left"].exists)
+        XCTAssertTrue(row.staticTexts["3rd party"].exists)
+        XCTAssertTrue(row.staticTexts["0% left"].exists)
+    }
     func testTabSwitchLatency() throws {
         for _ in 0..<12 {
             app.radioButtons["History"].click()
