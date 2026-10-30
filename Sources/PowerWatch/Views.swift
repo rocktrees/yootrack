@@ -252,7 +252,9 @@ struct Dashboard: View {
         HStack {
             Image(systemName: "info.circle")
             Text("Add the administrator collector for Energy Impact, network rates, and hardware power.").font(.caption)
-            Spacer(); Button(model.setupBusy ? "Installing…" : model.helperInstalled ? "Repair Collector" : "Install Collector") { model.installHelper() }.disabled(model.setupBusy)
+            Spacer()
+            CollectorInfoButton()
+            Button(model.setupBusy ? "Installing…" : model.helperInstalled ? "Repair Collector" : "Install Collector") { model.installHelper() }.disabled(model.setupBusy)
         }.padding(12).background(.orange.opacity(0.09))
     }
     @ViewBuilder private var details: some View {
@@ -632,6 +634,31 @@ struct Metric: View {
     var body: some View { VStack(alignment: .leading, spacing: 6) { Text(title).font(.caption).foregroundStyle(.secondary); Text(value).font(.title3.weight(.semibold)).monospacedDigit() }.frame(maxWidth: .infinity, alignment: .leading).padding(14).background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10)) }
 }
 
+private struct CollectorInfoButton: View {
+    @State private var showingInfo = false
+    var body: some View {
+        Button("What is this?") { showingInfo.toggle() }
+            .buttonStyle(.link).font(.caption)
+            .accessibilityIdentifier("collector.info")
+            .popover(isPresented: $showingInfo, arrowEdge: .bottom) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("About the collector").font(.headline)
+                    Text("The collector is an optional background helper that gives YooTrack access to more system measurements, including Energy Impact, network rates, and hardware power.")
+                    Text("macOS requires administrator access for these measurements. Without the collector, basic processor and GPU monitoring still works.")
+                    Text("After an app update, Repair Collector reconnects the helper to the new app version.")
+                    Text("The current installer has a known security limitation.").foregroundStyle(.secondary)
+                    HStack {
+                        Link("Security details", destination: URL(string: "https://github.com/rocktrees/yootrack/blob/main/SECURITY_AUDIT.md")!)
+                        Spacer()
+                        Button("Done") { showingInfo = false }.keyboardShortcut(.cancelAction)
+                    }
+                }
+                .font(.callout).padding(16).frame(width: 340, alignment: .leading)
+                .accessibilityIdentifier("collector.info.popover")
+            }
+    }
+}
+
 struct Preferences: View {
     @ObservedObject var model: AppModel
     @State private var confirmingClear = false
@@ -645,7 +672,10 @@ struct Preferences: View {
             }
             Section("Administrator collector") {
                 Text(model.helperConnected ? "Connected · full collection" : "Not connected · basic collection")
-                Button(model.setupBusy ? "Working…" : "Install or Repair Collector…") { model.installHelper() }.disabled(model.setupBusy)
+                HStack {
+                    Button(model.setupBusy ? "Working…" : "Install or Repair Collector…") { model.installHelper() }.disabled(model.setupBusy)
+                    CollectorInfoButton()
+                }
                 if model.helperInstalled { Button("Remove Collector…", role: .destructive) { confirmingRemove = true }.disabled(model.setupBusy) }
                 Text("Setup requires administrator authorization. The helper only reads metrics; app termination runs under your account.").font(.caption).foregroundStyle(.secondary)
             }

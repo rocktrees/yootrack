@@ -145,7 +145,11 @@ public enum ProcessInspector {
             for candidate in byParent[parent.id.pid] ?? [] where candidate.id.start >= parent.id.start && !visited.contains(candidate.id) {
                 unique[candidate.id] = candidate
             }
-            return unique.values.sorted { ($0.processorWatts ?? -1, $0.cpuPercent ?? -1, Double($0.reading.memoryBytes ?? 0)) > ($1.processorWatts ?? -1, $1.cpuPercent ?? -1, Double($1.reading.memoryBytes ?? 0)) }
+            return unique.values.sorted { left, right in
+                let leftKey: (Double, Double, Double) = (left.processorWatts ?? -1, left.cpuPercent ?? -1, Double(left.reading.memoryBytes ?? 0))
+                let rightKey: (Double, Double, Double) = (right.processorWatts ?? -1, right.cpuPercent ?? -1, Double(right.reading.memoryBytes ?? 0))
+                return leftKey > rightKey
+            }
         }
         func walk(_ parent: ProcessUsage, depth: Int) {
             guard depth <= maxDepth else { return }

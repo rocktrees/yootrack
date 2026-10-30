@@ -37,6 +37,23 @@ final class ProcessContextTests: XCTestCase {
         XCTAssertFalse(filtered.joined().contains("secret")); XCTAssertFalse(filtered.joined().contains("hunter2"))
         XCTAssertEqual(ProcessInspector.role(name: "python3", path: "", arguments: ["python3", "-c", "secret.py"]), "Interpreter · python3")
     }
+    func testDescendantsSortByPowerThenCPUThenMemory() {
+        func usage(_ pid: Int32, parent: Int32, watts: Double?, cpu: Double?, memory: UInt64?) -> ProcessUsage {
+            let reading = ProcessReading(identity: ProcessIdentity(pid: pid, start: 1), parentPID: parent, memoryBytes: memory)
+            return ProcessUsage(reading: reading, cpuPercent: cpu, processorWatts: watts, joules: nil, groupKey: "fixture", groupName: "Fixture", bundlePath: nil)
+        }
+        let root = usage(900000, parent: 1, watts: nil, cpu: nil, memory: nil)
+        let children = [
+            usage(900001, parent: root.id.pid, watts: 1, cpu: 10, memory: 100),
+            usage(900002, parent: root.id.pid, watts: 2, cpu: 1, memory: 1),
+            usage(900003, parent: root.id.pid, watts: 1, cpu: 11, memory: 1),
+            usage(900004, parent: root.id.pid, watts: 1, cpu: 10, memory: 200),
+            usage(900005, parent: root.id.pid, watts: nil, cpu: 99, memory: 999)
+        ]
+        let result = ProcessInspector.descendants(of: [root], in: [root] + children)
+        XCTAssertEqual(result.map { $0.process.id.pid }, [900002, 900003, 900004, 900001, 900005])
+    }
+
     func testDescendantsAndUsageDigestBuildProcessTreeAndRejectPIDReuse() {
         let root = ProcessUsage(reading: ProcessReading(identity: ProcessIdentity(pid: 100, start: 10), parentPID: 1, name: "zsh", path: "/bin/zsh", memoryBytes: 10_000_000), cpuPercent: 2, processorWatts: 0.2, joules: 1, groupKey: "app:term", groupName: "Terminal", bundlePath: "/Applications/Utilities/Terminal.app")
         let child = ProcessUsage(reading: ProcessReading(identity: ProcessIdentity(pid: 101, start: 20), parentPID: 100, name: "node", path: "/opt/homebrew/bin/node", memoryBytes: 50_000_000), cpuPercent: 25, processorWatts: 1.5, joules: 5, groupKey: "app:term", groupName: "Terminal", bundlePath: nil)
