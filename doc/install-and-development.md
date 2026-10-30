@@ -4,7 +4,7 @@
 
 ## Requirements
 
-YooTrack targets Apple silicon Macs running macOS 15 or later. Building from source requires Xcode with Swift 6. Optional on-device process summaries require a supported system and Apple Intelligence availability. Features and available counters can differ by Mac and macOS version.
+YooTrack targets Apple silicon Macs running macOS 15 or later. Building from source requires Xcode 26 or later and Swift 6; the resulting app still targets macOS 15 or later. Optional on-device process summaries require a supported system and Apple Intelligence availability. Features and available counters can differ by Mac and macOS version.
 
 ## Install a release
 
