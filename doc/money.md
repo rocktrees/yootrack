@@ -4,6 +4,8 @@
 
 The optional **Money** tab lets you enter spending or income, set monthly category limits, and record holdings. YooTrack displays budget and portfolio charts based on the data it has. It is a personal tracking tool, not financial advice; transactions, classifications, and balances can be incomplete or incorrect.
 
+The menu-bar popover has a **Budget** section with this month's category spending and any limits. Financial amounts are shown when that section is open; the menu-bar icon itself does not display them. Select a category or **Open Details** to open Money. Like the full budget view, the summary uses up to the most recent 2,000 ledger entries.
+
 ## Local data and categories
 
 Manual entries, budgets, synced transactions, and holdings are stored in a local SQLite ledger at `~/Library/Application Support/YooTrack/ledger.sqlite`. The app does not separately encrypt that database. Local category suggestions use merchant memory and rules; suggestions below the app’s confidence threshold are not automatically applied. You can also choose a category yourself.

@@ -80,25 +80,37 @@ private struct SortColumn: View {
 
 struct QuickMenu: View {
     @ObservedObject var model: AppModel
-    @State private var tab = 0
+    private enum Section: String, CaseIterable, Identifiable {
+        case processes = "Processes", aiUsage = "AI Usage", budget = "Budget"
+        var id: String { rawValue }
+    }
+    @State private var section = Section.processes
+    @State private var processTab = 0
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack { Image(systemName: "bolt.circle.fill").foregroundStyle(.teal); Text("YooTrack").font(.headline); Spacer(); Text(model.menuLabel).font(.caption).monospacedDigit() }
-            Picker("View", selection: $tab) { Text("Live").tag(0); Text("History").tag(1) }
-                .pickerStyle(.segmented).accessibilityIdentifier("menu.view")
-            if tab == 0 { liveContent } else { historyContent }
-            if !model.helperConnected { Text(model.setupBusy ? "Installing collector…" : "Basic monitoring · collector not connected").font(.caption).foregroundStyle(.orange) }
-            Divider()
-            ProviderMenuSection(model: model)
+            Picker("Section", selection: $section) { ForEach(Section.allCases) { Text($0.rawValue).tag($0) } }
+                .pickerStyle(.segmented).accessibilityIdentifier("menu.section")
+            switch section {
+            case .processes:
+                Picker("View", selection: $processTab) { Text("Live").tag(0); Text("History").tag(1) }
+                    .pickerStyle(.segmented).accessibilityIdentifier("menu.view")
+                if processTab == 0 { liveContent } else { historyContent }
+                if !model.helperConnected { Text(model.setupBusy ? "Installing collector…" : "Basic monitoring · collector not connected").font(.caption).foregroundStyle(.orange) }
+            case .aiUsage:
+                ProviderMenuSection(model: model)
+            case .budget:
+                BudgetMenuSection(model: model)
+            }
             Divider()
             HStack {
                 Button("Open Details", action: openDetails).buttonStyle(.borderedProminent).tint(.teal)
                 Spacer(); Button(model.paused ? "Resume" : "Pause") { model.togglePause() }
             }
             HStack { Button("Settings…") { model.openPreferences() }; Spacer(); Button("Quit YooTrack") { model.quit() } }.font(.caption)
-        }.padding(14).frame(width: 520).accessibilityElement(children: .contain).accessibilityIdentifier("quick.menu")
+        }.padding(14).frame(width: section == .aiUsage ? 440 : 520).accessibilityElement(children: .contain).accessibilityIdentifier("quick.menu")
             .onAppear { model.visibility("menu", isVisible: true) }.onDisappear { model.visibility("menu", isVisible: false) }
-            .onChange(of: tab) { _, next in if next == 1 { model.refreshHistory() } }
+            .onChange(of: processTab) { _, next in if next == 1 { model.refreshHistory() } }
             .alert("YooTrack", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("OK") { model.errorMessage = nil } } message: { Text(model.errorMessage ?? "") }
     }
     @ViewBuilder private var liveContent: some View {
@@ -182,7 +194,11 @@ struct QuickMenu: View {
         }
     }
     private func openDetails() {
-        if tab == 1 { model.requestedHubTab = 1 }
+        switch section {
+        case .processes: model.requestedHubTab = processTab
+        case .aiUsage: model.requestedHubTab = 2
+        case .budget: model.requestedHubTab = 3
+        }
         model.openDetails()
     }
 }
@@ -747,7 +763,7 @@ struct Preferences: View {
                 Button(model.providerBusy ? "Refreshing…" : "Refresh now") { model.refreshProviders() }.disabled(model.providerBusy)
             }
             Section("Money") {
-                Text("Spending and holdings stay in a private ledger on this Mac. Plaid credentials and access tokens stay in Keychain. The menu bar does not show dollar amounts.").font(.caption).foregroundStyle(.secondary)
+                Text("Spending and holdings stay in a private ledger on this Mac. Plaid credentials and access tokens stay in Keychain. The Budget section of the menu shows monthly spending and limits when opened.").font(.caption).foregroundStyle(.secondary)
                 Button("Open Money") { model.requestedHubTab = 3; model.hubShowsMoney = true; model.hubShowsProviders = false; model.openDetails() }
             }
         }.formStyle(.grouped).frame(width: 480, height: 640)
