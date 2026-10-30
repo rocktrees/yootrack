@@ -10,6 +10,54 @@ struct MoneyOverviewDraft {
     var clientID = ""; var plaidSecret = ""; var jevKey = ""
 }
 
+struct BudgetMenuSection: View {
+    @ObservedObject var model: AppModel
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("This month's budget").font(.caption.bold())
+                Spacer()
+                if model.menuBudgetLoading { Text("Loading…").font(.caption2).foregroundStyle(.secondary) }
+            }
+            if model.menuBudgetRows.isEmpty {
+                if !model.menuBudgetLoading {
+                    Text("Add spending or monthly limits in Money to see your budget here.").font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 8) {
+                        ForEach(model.menuBudgetRows) { row in
+                            Button {
+                                model.requestedHubTab = 3
+                                model.openDetails()
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text(row.category).font(.caption.weight(.medium))
+                                        Spacer()
+                                        Text("$" + MoneyMath.dollars(row.spentCents) + (row.limitCents > 0 ? " / $" + MoneyMath.dollars(row.limitCents) : " spent"))
+                                            .font(.caption).monospacedDigit()
+                                    }
+                                    if row.limitCents > 0 {
+                                        RemainingBar(percent: max(0, min(100, Double(row.remainingCents) / Double(row.limitCents) * 100)))
+                                        Text(row.remainingCents >= 0 ? "$" + MoneyMath.dollars(row.remainingCents) + " left" : "$" + MoneyMath.dollars(-row.remainingCents) + " over limit")
+                                            .font(.caption2).foregroundStyle(row.remainingCents < 0 ? Color.orange : Color.secondary)
+                                    } else {
+                                        Text("No monthly limit").font(.caption2).foregroundStyle(.secondary)
+                                    }
+                                }.padding(.vertical, 2)
+                            }.buttonStyle(FullRowButtonStyle()).accessibilityIdentifier("menu.budget." + row.category)
+                            Divider()
+                        }
+                    }
+                }.frame(maxHeight: 260)
+            }
+        }.onAppear { model.setMenuBudgetVisible(true) }
+            .onDisappear { model.setMenuBudgetVisible(false) }
+            .accessibilityIdentifier("menu.budget.section")
+    }
+}
+
 struct MoneyList: View {
     @ObservedObject var model: AppModel
     @Binding var draft: MoneyListDraft

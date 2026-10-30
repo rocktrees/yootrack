@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 #if SWIFT_PACKAGE
 import PowerWatchCore
 #endif
@@ -78,8 +79,18 @@ struct RemainingBar: View {
     }
 }
 
+private struct ProviderContentHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 struct ProviderMenuSection: View {
     @ObservedObject var model: AppModel
+    @State private var contentHeight: CGFloat = 0
+    private var maxContentHeight: CGFloat {
+        // Leave room for the menu header, section picker and footer on the current screen.
+        max(150, (NSScreen.main?.visibleFrame.height ?? 800) - 220)
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -90,25 +101,39 @@ struct ProviderMenuSection: View {
             if model.providers.isEmpty {
                 Button("Set up AI usage") { model.focusProvider(nil) }.font(.caption).accessibilityIdentifier("menu.provider.setup")
             } else {
-                ForEach(model.providers.prefix(6)) { provider in
-                    Button { model.focusProvider(provider.id) } label: {
-                        let rates = provider.rateWindows
-                        VStack(alignment: .leading, spacing: 3) {
-                            if rates.count > 1 { Text(provider.name).font(.caption) }
-                            ForEach(rates.prefix(3)) { window in
-                                HStack(spacing: 8) {
-                                    Text(rates.count > 1 ? window.label : provider.name).lineLimit(1).frame(width: 88, alignment: .leading)
-                                    RemainingBar(percent: window.percentRemaining)
-                                    Text(ProviderDisplay.left(window)).font(.caption2).monospacedDigit().lineLimit(1).frame(width: 88, alignment: .trailing)
-                                }
-                            }
-                            ForEach(ProviderDisplay.resets(rates), id: \.self) { line in
-                                Text(line).font(.caption2).foregroundStyle(.secondary)
-                            }
-                        }.padding(.vertical, 3)
-                    }.buttonStyle(.plain).accessibilityIdentifier("menu.provider." + provider.id)
-                        .help(provider.error ?? provider.source)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(model.providers) { provider in
+                            Button { model.focusProvider(provider.id) } label: {
+                                let windows = provider.rateWindows.isEmpty ? provider.windows : provider.rateWindows
+                                VStack(alignment: .leading, spacing: 3) {
+                                    if windows.isEmpty {
+                                        HStack { Text(provider.name); Spacer(); Text(ProviderDisplay.remaining(provider)).foregroundStyle(.secondary) }
+                                    } else {
+                                        if windows.count > 1 { Text(provider.name).font(.caption) }
+                                        ForEach(windows) { window in
+                                            HStack(spacing: 8) {
+                                                Text(windows.count > 1 ? window.label : provider.name).lineLimit(1).frame(width: 120, alignment: .leading).help(windows.count > 1 ? window.label : provider.name)
+                                                RemainingBar(percent: window.percentRemaining)
+                                                Text(ProviderDisplay.left(window)).font(.caption2).monospacedDigit().lineLimit(1).frame(width: 80, alignment: .trailing)
+                                            }
+                                        }
+                                        ForEach(ProviderDisplay.resets(windows), id: \.self) { line in
+                                            Text(line).font(.caption2).foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }.padding(.vertical, 3)
+                            }.buttonStyle(FullRowButtonStyle()).accessibilityIdentifier("menu.provider." + provider.id)
+                                .help(provider.error ?? provider.source)
+                            Divider()
+                        }
+                    }.fixedSize(horizontal: false, vertical: true)
+                        .background(GeometryReader { geometry in
+                            Color.clear.preference(key: ProviderContentHeightKey.self, value: geometry.size.height)
+                        })
                 }
+                .frame(height: min(max(contentHeight, 1), maxContentHeight))
+                .onPreferenceChange(ProviderContentHeightKey.self) { contentHeight = $0 }
             }
         }
     }

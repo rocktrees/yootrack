@@ -48,6 +48,8 @@ enum HistoryRange: String, CaseIterable, Identifiable {
     @Published var hubShowsMoney = false
     @Published var ledgerEntries: [LedgerEntry] = []
     @Published var budgetRows: [BudgetRow] = []
+    @Published var menuBudgetRows: [BudgetRow] = []
+    @Published var menuBudgetLoading = false
     @Published var holdings: [Holding] = []
     @Published var portfolioPoints: [PortfolioPoint] = []
     @Published var moneyBusy = false
@@ -58,6 +60,8 @@ enum HistoryRange: String, CaseIterable, Identifiable {
     private var ledger: LedgerStore?
     private let moneyQueue = DispatchQueue(label: "ai.powerwatch.money.read", qos: .userInitiated)
     private var moneyGeneration = 0
+    private var menuBudgetGeneration = 0
+    private var menuBudgetVisible = false
     private let ledgerKeychain = KeychainSecretStore(service: "ai.powerwatch.ledger")
     @Published var selectedProvider: String?
     @Published var requestedHubTab: Int?
@@ -495,6 +499,7 @@ enum HistoryRange: String, CaseIterable, Identifiable {
     }
     func reloadMoney() {
         guard let ledger else { return }
+        if menuBudgetVisible { reloadMenuBudget() }
         moneyGeneration += 1
         let generation = moneyGeneration, keychain = ledgerKeychain
         moneyLoading = true
@@ -515,6 +520,34 @@ enum HistoryRange: String, CaseIterable, Identifiable {
                 DispatchQueue.main.async { [weak self] in
                     guard let self, self.moneyGeneration == generation else { return }
                     self.moneyLoading = false; self.errorMessage = "Money ledger: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+    func setMenuBudgetVisible(_ visible: Bool) {
+        menuBudgetVisible = visible
+        if visible { reloadMenuBudget() }
+        else {
+            menuBudgetGeneration += 1; menuBudgetLoading = false
+            if monitoringEnabled { menuBudgetRows = [] }
+        }
+    }
+    private func reloadMenuBudget() {
+        guard monitoringEnabled, let ledger else { return }
+        menuBudgetGeneration += 1
+        let generation = menuBudgetGeneration
+        menuBudgetLoading = true
+        moneyQueue.async { [weak self] in
+            do {
+                let rows = try ledger.budget()
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.menuBudgetVisible, self.menuBudgetGeneration == generation else { return }
+                    self.menuBudgetRows = rows; self.menuBudgetLoading = false
+                }
+            } catch {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.menuBudgetVisible, self.menuBudgetGeneration == generation else { return }
+                    self.menuBudgetLoading = false; self.errorMessage = "Budget: \(error.localizedDescription)"
                 }
             }
         }

@@ -113,6 +113,9 @@ public struct BudgetRow: Identifiable, Equatable, Sendable {
     public var limitCents: Int
     public var id: String { category }
     public var remainingCents: Int { limitCents - spentCents }
+    public init(category: String, spentCents: Int, limitCents: Int) {
+        self.category = category; self.spentCents = spentCents; self.limitCents = limitCents
+    }
 }
 
 public struct Holding: Identifiable, Equatable, Sendable {

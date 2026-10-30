@@ -100,6 +100,29 @@ final class InteractionTests: XCTestCase {
         menu.radioButtons["Live"].click()
         XCTAssertTrue(menu.buttons["menu.consumer.fixture-app-000"].waitForExistence(timeout: 5))
     }
+    func testCompactMenuSeparatesProcessesAIAndBudget() {
+        app.terminate()
+        app.launchArguments.append("--test-quick-menu")
+        app.launch()
+        let menu = app.descendants(matching: .any)["quick.menu"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 5))
+        XCTAssertTrue(menu.buttons["menu.consumer.fixture-app-000"].exists)
+        XCTAssertFalse(menu.buttons["menu.provider.cursor"].exists)
+        menu.radioButtons["AI Usage"].click()
+        XCTAssertTrue(menu.buttons["menu.provider.cursor"].waitForExistence(timeout: 5))
+        let lastProvider = menu.buttons["menu.provider.openai"]
+        XCTAssertTrue(lastProvider.waitForExistence(timeout: 5))
+        XCTAssertTrue(lastProvider.isHittable, "The AI usage section should fit all fixture providers without scrolling.")
+        XCTAssertLessThanOrEqual(menu.frame.width, 460)
+        XCTAssertFalse(menu.buttons["menu.consumer.fixture-app-000"].exists)
+        menu.radioButtons["Budget"].click()
+        XCTAssertTrue(menu.buttons["menu.budget.Dining"].waitForExistence(timeout: 5))
+        XCTAssertTrue(menu.buttons["menu.budget.Groceries"].exists)
+        XCTAssertTrue(menu.buttons["menu.budget.Other"].exists)
+        XCTAssertFalse(menu.buttons["menu.provider.cursor"].exists)
+        menu.radioButtons["Processes"].click()
+        XCTAssertTrue(menu.buttons["menu.consumer.fixture-app-000"].waitForExistence(timeout: 5))
+    }
     func testTabsLoadAndKeepMoneyDraft() {
         app.radioButtons["Money"].click()
         let payee = app.textFields["money.payee"]
