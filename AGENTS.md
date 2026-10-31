@@ -1,5 +1,7 @@
 # YooTrack build and release rules
 
+- Make changes on a branch and open a pull request to `main`; do not push changes directly to `main`. After the user merges, verify that the automatic release workflow succeeds and that the GitHub release contains the Apple silicon DMG, app ZIP, and checksums. If automation fails, investigate and complete the release or report the blocker.
+- Every pull request that will be merged to `main` must set a new version that has not already been tagged or released. The merge workflow publishes that version; do not reuse or move an existing tag.
 - The canonical app version is `CFBundleShortVersionString` in `Resources/Info.plist`, in `MAJOR.MINOR.PATCH` form. Keep `CFBundleVersion` in the same file equal to it.
 - The first release is v1.0.0. When preparing a later user-facing build with new changes, choose and record the next appropriate version: patch for fixes, minor for compatible features, and major for incompatible changes. Never reuse an existing release tag for different code. Rebuilding the same version from the same commit does not require a version bump; routine test builds are not releases.
 - Update the version before building, testing, tagging, or publishing a release. The Git tag must be `v` followed by the exact app version. Keep release notes and any displayed or documented version consistent with that value.

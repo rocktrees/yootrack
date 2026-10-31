@@ -35,7 +35,9 @@ If you choose to use it, select **Install Collector** in the details window and 
 
 Run the core tests with `/bin/sh scripts/test.sh`, or open `PowerWatch.xcodeproj` in Xcode. The [repository map](structure.md), [technology notes](../TECH.md), and [earlier technical reference](REFERENCE.md) provide more detail.
 
-The canonical app version is in `Resources/Info.plist` and follows `MAJOR.MINOR.PATCH`. For a release, update both version fields, commit the changes, and create a GitHub release with a matching tag such as `v1.0.0`. Publishing the release triggers GitHub Actions on an Apple silicon runner. Once tests pass, the workflow attaches a disk image, app ZIP, and SHA-256 checksums; the assets appear after it finishes.
+The canonical app version is in `Resources/Info.plist` and follows `MAJOR.MINOR.PATCH`. Make changes in a branch and open a pull request to `main`; update both version fields to a new, unreleased version before merging. A push to `main` runs the release workflow on an Apple silicon runner: it tests and packages that exact commit, then publishes a GitHub release with a matching tag, disk image, app ZIP, and SHA-256 checksums. The release is published only after the files upload. Existing release tags are never overwritten, so a merge with a reused version fails and needs a version bump.
+
+The existing release workflow can also build assets for a manually published release or be run manually for an existing release tag. The automatic workflow can be retried from GitHub Actions if a draft upload is interrupted.
 
 To produce the artifacts locally on an Apple silicon Mac:
 
