@@ -98,6 +98,52 @@ final class InteractionTests: XCTestCase {
         menu.buttons["Open Details"].click()
         XCTAssertTrue(app.buttons["provider.row.cursor"].waitForExistence(timeout: 5))
     }
+    func testQuickMenuScrollsPastFiveProcesses() {
+        app.buttons["dashboard.openMenu"].click()
+        let menu = app.descendants(matching: .any)["quick.menu"]
+        let list = menu.scrollViews["menu.processes.scroll"]
+        XCTAssertTrue(list.waitForExistence(timeout: 5))
+        XCTAssertEqual(list.frame.height, 220, accuracy: 1)
+        XCTAssertTrue(menu.buttons["menu.consumer.fixture-app-000"].isHittable)
+        list.swipeUp()
+        XCTAssertTrue(menu.buttons["menu.consumer.fixture-app-005"].waitForExistence(timeout: 5))
+        XCTAssertTrue(menu.buttons["menu.consumer.fixture-app-005"].isHittable)
+    }
+    func testQuickMenuRemembersSectionWhenReopened() {
+        let openMenu = app.buttons["dashboard.openMenu"]
+        openMenu.click()
+        var menu = app.descendants(matching: .any)["quick.menu"]
+        menu.radioButtons["AI Usage"].click()
+        XCTAssertTrue(menu.buttons["menu.provider.cursor"].waitForExistence(timeout: 5))
+        menu.buttons["Open Details"].click()
+        openMenu.click()
+        menu = app.descendants(matching: .any)["quick.menu"]
+        XCTAssertTrue(menu.buttons["menu.provider.cursor"].waitForExistence(timeout: 5))
+        menu.radioButtons["Processes"].click()
+        menu.radioButtons["History"].click()
+        menu.buttons["Open Details"].click()
+        openMenu.click()
+        menu = app.descendants(matching: .any)["quick.menu"]
+        XCTAssertTrue(menu.descendants(matching: .any)["menu.history.period"].waitForExistence(timeout: 5))
+    }
+    func testHistorySearchKeepsOverallRank() {
+        app.radioButtons["History"].click()
+        let search = app.textFields["history.search"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.click()
+        search.typeText("Fixture App 003")
+        XCTAssertTrue(app.descendants(matching: .any)["consumer.history.fixture-app-003"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.descendants(matching: .any)["consumer.history.fixture-app-000"].exists)
+        XCTAssertEqual(app.staticTexts["history.rank.fixture-app-003"].label, "4")
+    }
+    func testProviderSearchFiltersList() {
+        app.radioButtons["AI Usage"].click()
+        let search = app.textFields["provider.search"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.click(); search.typeText("OpenAI")
+        XCTAssertTrue(app.buttons["provider.row.openai"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["provider.row.cursor"].exists)
+    }
     func testCompactMenuHistoryTab() {
         app.terminate()
         app.launchArguments.append("--test-quick-menu")
