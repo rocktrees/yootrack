@@ -81,22 +81,19 @@ private struct SortColumn: View {
 struct QuickMenu: View {
     @ObservedObject var model: AppModel
     var onNavigate: (() -> Void)? = nil
-    private enum Section: String, CaseIterable, Identifiable {
-        case processes = "Processes", aiUsage = "AI Usage", budget = "Budget"
-        var id: String { rawValue }
-    }
-    @State private var section = Section.processes
-    @State private var processTab = 0
+    private let liveRowHeight: CGFloat = 44
+    @State private var liveSearch = ""
+    @State private var historySearch = ""
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack { Image(nsImage: YooTrackBrand.mark).resizable().renderingMode(.template).frame(width: 20, height: 20).foregroundStyle(.teal); Text("YooTrack").font(.headline); Spacer(); Text(model.menuLabel).font(.caption).monospacedDigit() }
-            Picker("Section", selection: $section) { ForEach(Section.allCases) { Text($0.rawValue).tag($0) } }
+            Picker("Section", selection: $model.menuSection) { ForEach(QuickMenuSection.allCases) { Text($0.rawValue).tag($0) } }
                 .pickerStyle(.segmented).accessibilityIdentifier("menu.section")
-            switch section {
+            switch model.menuSection {
             case .processes:
-                Picker("View", selection: $processTab) { Text("Live").tag(0); Text("History").tag(1) }
+                Picker("View", selection: $model.menuProcessTab) { Text("Live").tag(0); Text("History").tag(1) }
                     .pickerStyle(.segmented).accessibilityIdentifier("menu.view")
-                if processTab == 0 { liveContent } else { historyContent }
+                if model.menuProcessTab == 0 { liveContent } else { historyContent }
                 if !model.helperConnected { Text(model.setupBusy ? "Installing collector…" : "Basic monitoring · collector not connected").font(.caption).foregroundStyle(.orange) }
             case .aiUsage:
                 ProviderMenuSection(model: model, onNavigate: onNavigate)
@@ -109,32 +106,40 @@ struct QuickMenu: View {
                 Spacer(); Button(model.paused ? "Resume" : "Pause") { model.togglePause() }
             }
             HStack { Button("Settings…") { model.openPreferences() }; Spacer(); Button("Quit YooTrack") { model.quit() } }.font(.caption)
-        }.padding(14).frame(width: section == .aiUsage ? 440 : 520).accessibilityElement(children: .contain).accessibilityIdentifier("quick.menu")
-            .onAppear { model.visibility("menu", isVisible: true) }.onDisappear { model.visibility("menu", isVisible: false) }
-            .onChange(of: processTab) { _, next in if next == 1 { model.refreshHistory() } }
+        }.padding(14).frame(width: model.menuSection == .aiUsage ? 440 : 520).accessibilityElement(children: .contain).accessibilityIdentifier("quick.menu")
+            .onAppear { model.visibility("menu", isVisible: true); if model.menuSection == .processes && model.menuProcessTab == 1 { model.refreshHistory() } }.onDisappear { model.visibility("menu", isVisible: false) }
+            .onChange(of: model.menuProcessTab) { _, next in if next == 1 { model.refreshHistory() } }
+            .onChange(of: model.menuSection) { _, next in if next == .processes && model.menuProcessTab == 1 { model.refreshHistory() } }
             .alert("YooTrack", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("OK") { model.errorMessage = nil } } message: { Text(model.errorMessage ?? "") }
     }
     @ViewBuilder private var liveContent: some View {
+            TextField("Search name, path, or PID", text: $liveSearch).textFieldStyle(.roundedBorder).accessibilityIdentifier("menu.live.search")
             if model.paused { Text("Monitoring is paused.").foregroundStyle(.secondary) }
             else if model.apps.isEmpty { Text("Reading live processes…").font(.caption).foregroundStyle(.secondary) }
             else {
+                let matches = model.menuApps.filter { SearchFilter.matches(liveSearch, app: $0) }
                 Text("Sorted by " + model.sort.rawValue.lowercased() + (model.sortDescending ? " · descending" : " · ascending")).font(.caption).foregroundStyle(.secondary)
                 HStack {
                     SortColumn(model: model, column: .name, label: "App").frame(width: 60)
                     Spacer(minLength: 4); UsageCells.header(model: model, compact: true); Color.clear.frame(width: 18)
                 }.font(.caption2)
-                ForEach(model.menuApps.prefix(8)) { app in
-                    HStack(spacing: 6) {
-                        Image(nsImage: model.icon(for: app)).resizable().frame(width: 20, height: 20)
-                        Button { model.select(app: app.id); openDetails() } label: {
-                            HStack(spacing: 6) { Text(app.name).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).help(app.name); UsageCells(app: app, compact: true) }.padding(.vertical, 3)
-                        }.buttonStyle(FullRowButtonStyle()).accessibilityIdentifier("menu.consumer." + app.id)
-                        if let target = ProcessControl.target(for: app) {
-                            Button { model.control(target, force: false) } label: { Image(systemName: "xmark.circle") }.buttonStyle(.borderless).frame(width: 18).help("Ask \(app.name) to quit")
-                        } else { Color.clear.frame(width: 18, height: 20)
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(matches) { app in
+                            HStack(spacing: 6) {
+                                Image(nsImage: model.icon(for: app)).resizable().frame(width: 20, height: 20)
+                                Button { model.select(app: app.id); openDetails() } label: {
+                                    HStack(spacing: 6) { Text(app.name).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).help(app.name); UsageCells(app: app, compact: true) }.padding(.vertical, 3)
+                                }.buttonStyle(FullRowButtonStyle()).accessibilityIdentifier("menu.consumer." + app.id)
+                                if let target = ProcessControl.target(for: app) {
+                                    Button { model.control(target, force: false) } label: { Image(systemName: "xmark.circle") }.buttonStyle(.borderless).frame(width: 18).help("Ask \(app.name) to quit")
+                                } else { Color.clear.frame(width: 18, height: 20) }
+                            }.frame(height: liveRowHeight)
                         }
                     }
-                }
+                }.frame(height: liveRowHeight * CGFloat(min(matches.count, 5)))
+                    .accessibilityIdentifier("menu.processes.scroll")
+                if matches.isEmpty { Text("No matching processes.").font(.caption).foregroundStyle(.secondary) }
                 if model.apps.contains(where: \.partial) { Text("* Some process power counters are unavailable. Network requires the collector; — means unavailable.").font(.caption2).foregroundStyle(.secondary) }
             }
             Text("Device GPU: " + Display.decimal(model.sample?.gpu?.utilizationPercent, suffix: "%")).font(.caption).monospacedDigit()
@@ -142,6 +147,7 @@ struct QuickMenu: View {
     }
     private var historyContent: some View {
         let total = model.history.rows.reduce(0) { $0 + $1.joules }
+        let matches = HistoryRanking.processor.ranked(model.history.rows, matching: historySearch)
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Processor history").font(.caption.bold())
@@ -153,11 +159,13 @@ struct QuickMenu: View {
             if model.historyRange == .custom {
                 VStack(alignment: .leading) { DatePicker("From", selection: $model.customStart); DatePicker("To", selection: $model.customEnd) }.font(.caption)
             }
+            TextField("Search history", text: $historySearch).textFieldStyle(.roundedBorder).accessibilityIdentifier("menu.history.search")
             if model.history.batteryJoules > 0 {
                 Text("Battery used: " + Display.batteryUsed(model.history.batteryLossPoints) + String(format: " · Attribution coverage: %.0f%%", model.history.attributionCoverage * 100))
                     .font(.caption2).foregroundStyle(.secondary)
             }
             HStack {
+                Text("#").frame(width: 28, alignment: .trailing)
                 Text("App / process").frame(maxWidth: .infinity, alignment: .leading)
                 Text("Avg power").frame(width: 76, alignment: .trailing)
                 Text("Energy").frame(width: 76, alignment: .trailing)
@@ -169,10 +177,13 @@ struct QuickMenu: View {
                 Text("Loading history…").font(.caption).foregroundStyle(.secondary).padding(.vertical, 8)
             } else if model.history.rows.isEmpty {
                 Text("History appears after active processes have been observed for a full interval.").font(.caption).foregroundStyle(.secondary).padding(.vertical, 8)
+            } else if matches.isEmpty {
+                Text("No matching history.").font(.caption).foregroundStyle(.secondary).padding(.vertical, 8)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(model.history.rows) { row in
+                        ForEach(matches) { result in
+                            let row = result.row
                             Button {
                                 model.select(app: row.id)
                                 model.requestedHubTab = 1
@@ -180,6 +191,7 @@ struct QuickMenu: View {
                                 onNavigate?()
                             } label: {
                                 HStack {
+                                    Text("\(result.rank)").frame(width: 28, alignment: .trailing).foregroundStyle(.secondary).accessibilityIdentifier("menu.history.rank." + row.id)
                                     Image(nsImage: model.icon(for: row)).resizable().frame(width: 20, height: 20).accessibilityHidden(true)
                                     Text(row.name).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).help(row.name)
                                     Text(row.energyAvailable ? Display.watts(row.averageWatts) : "—").frame(width: 76, alignment: .trailing)
@@ -196,8 +208,8 @@ struct QuickMenu: View {
         }
     }
     private func openDetails() {
-        switch section {
-        case .processes: model.requestedHubTab = processTab
+        switch model.menuSection {
+        case .processes: model.requestedHubTab = model.menuProcessTab
         case .aiUsage: model.requestedHubTab = 2
         case .budget: model.requestedHubTab = 3
         }
@@ -543,10 +555,7 @@ private struct ConsumerBrowser: View {
     @Binding var moneyDraft: MoneyListDraft
     @Binding var providerDraft: ProviderListDraft
     @State private var historyRanking = HistoryRanking.battery
-    private enum HistoryRanking: String, CaseIterable, Identifiable {
-        case battery = "Battery", impact = "Energy Impact", processor = "Processor"
-        var id: String { rawValue }
-    }
+    @State private var historySearch = ""
     var body: some View {
         VStack(spacing: 0) {
             Picker("View", selection: Binding(get: { tab }, set: { next in
@@ -602,6 +611,7 @@ private struct ConsumerBrowser: View {
     }
     private var historyList: some View {
         let liveIDs = Set(model.apps.map(\.id))
+        let matches = historyRanking.ranked(model.history.rows, matching: historySearch)
         return VStack(alignment: .leading, spacing: 10) {
             Picker("Period", selection: $model.historyRange) { ForEach(HistoryRange.allCases) { Text($0.rawValue).tag($0) } }.padding(.horizontal, 12)
             if model.historyRange == .custom {
@@ -612,6 +622,7 @@ private struct ConsumerBrowser: View {
                 Picker("Rank by", selection: $historyRanking) { ForEach(HistoryRanking.allCases) { Text($0.rawValue).tag($0) } }
                     .pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("history.ranking")
             }.padding(.horizontal, 12)
+            TextField("Search history", text: $historySearch).textFieldStyle(.roundedBorder).accessibilityIdentifier("history.search").padding(.horizontal, 12)
             attributionStatus(model.history, model: model).padding(.horizontal, 12)
             HStack {
                 Text("Battery used: " + (model.history.batteryJoules > 0 ? Display.batteryUsed(model.history.batteryLossPoints) : "—"))
@@ -619,6 +630,7 @@ private struct ConsumerBrowser: View {
                 Text("Unattributed: " + (model.history.validBatteryJoules > 0 ? Display.batteryUsed(model.history.remainderPoints) : "—"))
             }.font(.caption).monospacedDigit().padding(.horizontal, 16)
             HStack {
+                Text("#").frame(width: 28, alignment: .trailing)
                 Text("App / process").frame(width: 112, alignment: .leading); Spacer()
                 Text("Battery used").frame(width: 100, alignment: .trailing)
                 Text("Avg impact").frame(width: 88, alignment: .trailing)
@@ -626,8 +638,10 @@ private struct ConsumerBrowser: View {
             }.font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 16)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(rankedHistory) { row in
+                    ForEach(matches) { result in
+                        let row = result.row
                         HStack(spacing: 0) {
+                            Text("\(result.rank)").font(.caption).foregroundStyle(.secondary).monospacedDigit().frame(width: 32, alignment: .trailing).accessibilityIdentifier("history.rank." + row.id)
                             Button { model.toggleHistoryGroup(row.id) } label: {
                                 Image(systemName: model.expandedHistory.contains(row.id) ? "chevron.down" : "chevron.right").font(.caption).frame(width: 22, height: 36)
                             }.buttonStyle(.plain).accessibilityIdentifier("history.expand." + row.id)
@@ -638,7 +652,7 @@ private struct ConsumerBrowser: View {
                             if let members = model.historyMembers[row.id] {
                                 if members.isEmpty { Text("Process energy appears after the next sample.").font(.caption).foregroundStyle(.secondary).padding(.leading, 36) }
                                 ForEach(members) { member in
-                                    historyRow(member, exited: false, showIcon: false).padding(.leading, 28)
+                                    historyRow(member, exited: false, showIcon: false).padding(.leading, 60)
                                 }
                             } else {
                                 Text("Loading processes…").font(.caption).foregroundStyle(.secondary).padding(.leading, 36)
@@ -650,21 +664,8 @@ private struct ConsumerBrowser: View {
             }
             Text("Battery used is expressed as % of a full charge (80% to 79% is 1%). App estimates and unattributed use cover valid battery-only intervals (\(Int((model.history.attributionCoverage * 100).rounded()))% of monitored time); total battery used can also include other intervals. Display, graphics, shared services and missed activity remain unattributed. Impact averages available samples and may be partial; it is a relative score, not battery use. CPU energy includes plugged-in time. — means unavailable.").font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 12)
             if model.history.rows.isEmpty { Text("History appears after active processes have been observed for a full interval.").font(.caption).foregroundStyle(.secondary).padding() }
+            else if matches.isEmpty { Text("No matching history.").font(.caption).foregroundStyle(.secondary).padding() }
             if let since = model.history.availableSince { Text("Stored since \(since.formatted(date: .abbreviated, time: .shortened))").font(.caption2).foregroundStyle(.secondary).padding(12) }
-        }
-    }
-    private var rankedHistory: [HistoryRow] {
-        model.history.rows.sorted { a, b in
-            func value(_ row: HistoryRow) -> Double? {
-                switch historyRanking {
-                case .battery: return row.shareOfDrain == nil ? nil : row.lossPoints
-                case .impact: return row.averageImpact
-                case .processor: return row.energyAvailable ? row.joules : nil
-                }
-            }
-            let left = value(a), right = value(b)
-            if left != right { return (left ?? -1) > (right ?? -1) }
-            return a.name.localizedStandardCompare(b.name) == .orderedAscending
         }
     }
     private func historyRow(_ row: HistoryRow, exited: Bool, showIcon: Bool) -> some View {

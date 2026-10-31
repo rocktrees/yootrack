@@ -10,6 +10,11 @@ enum HistoryRange: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum QuickMenuSection: String, CaseIterable, Identifiable {
+    case processes = "Processes", aiUsage = "AI Usage", budget = "Budget"
+    var id: String { rawValue }
+}
+
 @MainActor final class AppModel: ObservableObject {
     @Published var sample: MachineSample?
     @Published var interval: UsageInterval?
@@ -65,6 +70,12 @@ enum HistoryRange: String, CaseIterable, Identifiable {
     private let ledgerKeychain = KeychainSecretStore(service: "ai.powerwatch.ledger")
     @Published var selectedProvider: String?
     @Published var requestedHubTab: Int?
+    @Published var menuSection: QuickMenuSection = .processes {
+        didSet { if monitoringEnabled { UserDefaults.standard.set(menuSection.rawValue, forKey: "ai.powerwatch.menuSection") } }
+    }
+    @Published var menuProcessTab = 0 {
+        didSet { if monitoringEnabled { UserDefaults.standard.set(menuProcessTab, forKey: "ai.powerwatch.menuProcessTab") } }
+    }
     private var providerTimer: Timer?
     private var providerGeneration = 0
     private let service = SamplingService()
@@ -113,11 +124,15 @@ enum HistoryRange: String, CaseIterable, Identifiable {
         filterList()
     }
     private func filterList() {
-        sortedApps = menuApps.filter { app in query.isEmpty || app.name.localizedCaseInsensitiveContains(query) || app.processes.contains { $0.reading.path.localizedCaseInsensitiveContains(query) || String($0.id.pid).contains(query) || $0.reading.name.localizedCaseInsensitiveContains(query) } }
+        sortedApps = menuApps.filter { SearchFilter.matches(query, app: $0) }
     }
     func sortBy(_ column: UsageSort) { if sort == column { sortDescending.toggle() } else { sort = column } }
     init(monitoringEnabled: Bool = true, historyURL: URL? = nil) {
         self.monitoringEnabled = monitoringEnabled
+        if monitoringEnabled {
+            menuSection = UserDefaults.standard.string(forKey: "ai.powerwatch.menuSection").flatMap(QuickMenuSection.init(rawValue:)) ?? .processes
+            menuProcessTab = UserDefaults.standard.integer(forKey: "ai.powerwatch.menuProcessTab") == 1 ? 1 : 0
+        }
         do {
             if let historyURL {
                 store = try HistoryStore(url: historyURL)

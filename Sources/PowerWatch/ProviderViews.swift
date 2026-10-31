@@ -88,6 +88,13 @@ struct ProviderMenuSection: View {
     @ObservedObject var model: AppModel
     var onNavigate: (() -> Void)? = nil
     @State private var contentHeight: CGFloat = 0
+    @State private var search = ""
+    private var matches: [ProviderStatus] {
+        model.providers.filter { provider in
+            SearchFilter.matches(search, fields: [provider.name, provider.plan, provider.source]) ||
+                provider.windows.contains { SearchFilter.matches(search, fields: [$0.label]) }
+        }
+    }
     private var maxContentHeight: CGFloat {
         // Leave room for the menu header, section picker and footer on the current screen.
         max(150, (NSScreen.main?.visibleFrame.height ?? 800) - 220)
@@ -99,12 +106,15 @@ struct ProviderMenuSection: View {
                 Spacer()
                 if model.providerBusy { Text("Refreshing").font(.caption2).foregroundStyle(.secondary) }
             }
+            TextField("Search AI providers", text: $search).textFieldStyle(.roundedBorder).accessibilityIdentifier("menu.provider.search")
             if model.providers.isEmpty {
                 Button("Set up AI usage") { model.focusProvider(nil); onNavigate?() }.font(.caption).accessibilityIdentifier("menu.provider.setup")
+            } else if matches.isEmpty {
+                Text("No matching providers.").font(.caption).foregroundStyle(.secondary)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 6) {
-                        ForEach(model.providers) { provider in
+                        ForEach(matches) { provider in
                             Button { model.focusProvider(provider.id); onNavigate?() } label: {
                                 let windows = provider.rateWindows.isEmpty ? provider.windows : provider.rateWindows
                                 VStack(alignment: .leading, spacing: 3) {
@@ -140,14 +150,21 @@ struct ProviderMenuSection: View {
     }
 }
 
-struct ProviderListDraft { var name = ""; var used = ""; var limit = ""; var unit = "USD" }
+struct ProviderListDraft { var name = ""; var used = ""; var limit = ""; var unit = "USD"; var search = "" }
 struct ProviderDetailDraft { var providerID: String?; var secret = ""; var budgetText = ""; var manualUsed = ""; var manualLimit = "" }
 
 struct ProviderList: View {
     @ObservedObject var model: AppModel
     @Binding var draft: ProviderListDraft
+    private var matches: [ProviderStatus] {
+        model.providers.filter { provider in
+            SearchFilter.matches(draft.search, fields: [provider.name, provider.plan, provider.source]) ||
+                provider.windows.contains { SearchFilter.matches(draft.search, fields: [$0.label]) }
+        }
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            TextField("Search AI providers", text: $draft.search).textFieldStyle(.roundedBorder).accessibilityIdentifier("provider.search").padding(.horizontal, 12).padding(.bottom, 10)
             HStack {
                 Text("Provider").font(.caption2).foregroundStyle(.secondary)
                 Spacer()
@@ -155,7 +172,8 @@ struct ProviderList: View {
             }.padding(.horizontal, 16).padding(.bottom, 6)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(model.providers) { provider in
+                    if matches.isEmpty && !model.providers.isEmpty { Text("No matching providers.").font(.caption).foregroundStyle(.secondary).padding() }
+                    ForEach(matches) { provider in
                         Button { model.selectedProvider = provider.id } label: {
                             let windows = provider.rateWindows.isEmpty ? provider.windows : provider.rateWindows
                             VStack(alignment: .leading, spacing: 6) {
