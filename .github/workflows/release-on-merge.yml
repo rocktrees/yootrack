@@ -1,0 +1,81 @@
+name: Release merged changes
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - name: Check out merged commit and tags
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check release version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$GITHUB_REF" != refs/heads/main ]]; then
+            echo 'Automatic releases must run from main.' >&2
+            exit 1
+          fi
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
+          build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Resources/Info.plist)
+          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || [[ "$version" != "$build" ]]; then
+            echo 'App versions must match and use MAJOR.MINOR.PATCH.' >&2
+            exit 1
+          fi
+          tag="v$version"
+          if git show-ref --verify --quiet "refs/tags/$tag"; then
+            echo "Tag $tag already exists. Update the version before merging; existing tags are never reused." >&2
+            exit 1
+          fi
+          if gh release view "$tag" --json isDraft,targetCommitish > /tmp/yootrack-existing-release.json 2>/dev/null; then
+            if [[ "$(jq -r .isDraft /tmp/yootrack-existing-release.json)" != true ]] || [[ "$(jq -r .targetCommitish /tmp/yootrack-existing-release.json)" != "$GITHUB_SHA" ]]; then
+              echo "Release $tag already exists for another build." >&2
+              exit 1
+            fi
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Test and package Apple silicon release
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          sh scripts/release.sh "$RELEASE_TAG"
+          cd "build/releases/$RELEASE_TAG"
+          shasum -a 256 -c SHA256SUMS.txt
+          hdiutil verify "YooTrack-$RELEASE_TAG-macos-arm64.dmg"
+          unzip -tq "YooTrack-$RELEASE_TAG-macos-arm64.zip"
+      - name: Upload and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          cat > /tmp/yootrack-release-notes.md <<EOF
+          Requires macOS 15 or later on Apple silicon. Download the DMG to install or the ZIP for the app bundle; SHA-256 checksums are included.
+
+          **Security and privacy:** The app is ad-hoc signed and is not notarized; macOS Gatekeeper may block a downloaded copy. AI usage checks can automatically read locally available provider credentials and logs. The optional administrator collector has an unresolved installer security finding and is not installed automatically. Read the [disclaimer](https://github.com/$GITHUB_REPOSITORY/blob/$RELEASE_TAG/DISCLAIMER.md) and [security audit](https://github.com/$GITHUB_REPOSITORY/blob/$RELEASE_TAG/SECURITY_AUDIT.md) before installing or connecting accounts. Measurements are estimates.
+          EOF
+          if ! gh release view "$RELEASE_TAG" --json isDraft >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "YooTrack $RELEASE_TAG" --generate-notes --notes-file /tmp/yootrack-release-notes.md --draft
+          fi
+          gh release upload "$RELEASE_TAG" \
+            "build/releases/$RELEASE_TAG/YooTrack-$RELEASE_TAG-macos-arm64.dmg" \
+            "build/releases/$RELEASE_TAG/YooTrack-$RELEASE_TAG-macos-arm64.zip" \
+            "build/releases/$RELEASE_TAG/SHA256SUMS.txt" --clobber
+          gh release view "$RELEASE_TAG" --json assets > /tmp/yootrack-uploaded-assets.json
+          for asset in "build/releases/$RELEASE_TAG/YooTrack-$RELEASE_TAG-macos-arm64.dmg" "build/releases/$RELEASE_TAG/YooTrack-$RELEASE_TAG-macos-arm64.zip" "build/releases/$RELEASE_TAG/SHA256SUMS.txt"; do
+            digest="sha256:$(shasum -a 256 "$asset" | awk '{print $1}')"
+            if ! jq -e --arg name "$(basename "$asset")" --arg digest "$digest" 'any(.assets[]; .name == $name and .state == "uploaded" and .digest == $digest)' /tmp/yootrack-uploaded-assets.json >/dev/null; then
+              echo "Uploaded asset did not match: $asset" >&2
+              exit 1
+            fi
+          done
+          gh release edit "$RELEASE_TAG" --draft=false
