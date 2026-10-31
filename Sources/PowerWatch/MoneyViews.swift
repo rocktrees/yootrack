@@ -4,7 +4,7 @@ import Charts
 import PowerWatchCore
 #endif
 
-struct MoneyListDraft { var payee = ""; var amount = ""; var income = false }
+struct MoneyListDraft { var payee = ""; var amount = ""; var income = false; var search = "" }
 struct MoneyOverviewDraft {
     var limitCategory = LedgerCategory.all[0]; var limitAmount = ""; var symbol = ""; var holdingValue = ""
     var clientID = ""; var plaidSecret = ""; var jevKey = ""
@@ -13,6 +13,8 @@ struct MoneyOverviewDraft {
 struct BudgetMenuSection: View {
     @ObservedObject var model: AppModel
     var onNavigate: (() -> Void)? = nil
+    @State private var search = ""
+    private var matches: [BudgetRow] { model.menuBudgetRows.filter { SearchFilter.matches(search, fields: [$0.category]) } }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -20,14 +22,17 @@ struct BudgetMenuSection: View {
                 Spacer()
                 if model.menuBudgetLoading { Text("Loading…").font(.caption2).foregroundStyle(.secondary) }
             }
+            TextField("Search budget categories", text: $search).textFieldStyle(.roundedBorder).accessibilityIdentifier("menu.budget.search")
             if model.menuBudgetRows.isEmpty {
                 if !model.menuBudgetLoading {
                     Text("Add spending or monthly limits in Money to see your budget here.").font(.caption).foregroundStyle(.secondary)
                 }
+            } else if matches.isEmpty {
+                Text("No matching categories.").font(.caption).foregroundStyle(.secondary)
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
-                        ForEach(model.menuBudgetRows) { row in
+                        ForEach(matches) { row in
                             Button {
                                 model.requestedHubTab = 3
                                 model.openDetails()
@@ -63,6 +68,11 @@ struct BudgetMenuSection: View {
 struct MoneyList: View {
     @ObservedObject var model: AppModel
     @Binding var draft: MoneyListDraft
+    private var matches: [LedgerEntry] {
+        model.ledgerEntries.filter { entry in
+            SearchFilter.matches(draft.search, fields: [entry.payee, entry.category ?? "Uncategorized", entry.source, entry.accountMask])
+        }
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("New spending stays on this Mac.").font(.caption).foregroundStyle(.secondary).padding(.horizontal, 12)
@@ -76,12 +86,15 @@ struct MoneyList: View {
                 Button("Categorize on this Mac") { model.categorizeMoneyLocally() }.disabled(model.moneyBusy)
                 Spacer()
             }.padding(.horizontal, 12)
+            TextField("Search payee, category, or account", text: $draft.search).textFieldStyle(.roundedBorder).accessibilityIdentifier("money.search").padding(.horizontal, 12)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if model.ledgerEntries.isEmpty {
                         Text(model.moneyLoading ? "Loading spending…" : "No spending recorded yet.").foregroundStyle(.secondary).padding()
+                    } else if matches.isEmpty {
+                        Text("No matching transactions.").foregroundStyle(.secondary).padding()
                     }
-                    ForEach(Array(model.ledgerEntries), id: \.id) { entry in
+                    ForEach(matches, id: \.id) { entry in
                         MoneyRow(entry: entry) { category in model.setSpendCategory(id: entry.id, category: category) }
                         Divider()
                     }
