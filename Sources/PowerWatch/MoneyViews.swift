@@ -12,6 +12,7 @@ struct MoneyOverviewDraft {
 
 struct BudgetMenuSection: View {
     @ObservedObject var model: AppModel
+    var onNavigate: (() -> Void)? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -30,6 +31,7 @@ struct BudgetMenuSection: View {
                             Button {
                                 model.requestedHubTab = 3
                                 model.openDetails()
+                                onNavigate?()
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {

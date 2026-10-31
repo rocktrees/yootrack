@@ -89,8 +89,14 @@ enum HistoryRange: String, CaseIterable, Identifiable {
     private var icons: [String: NSImage] = [:]
     private let monitoringEnabled: Bool
     private lazy var detailsWindow = DetailsWindowController(model: self)
+    private var statusBarController: StatusBarController?
     func openDetails() { detailsWindow.show() }
     func openPreferences() { detailsWindow.showPreferences() }
+    func openQuickMenu() { detailsWindow.showQuickMenu() }
+    func installStatusBar() {
+        guard statusBarController == nil else { return }
+        statusBarController = StatusBarController(model: self)
+    }
     var cadence: Double { visible.isEmpty ? 15 : 5 }
     var selectedApp: AppUsage? { apps.first { $0.id == selected } }
     var process: ProcessUsage? { selectedProcess.flatMap { identity in processIndex[identity] } }
@@ -372,7 +378,7 @@ enum HistoryRange: String, CaseIterable, Identifiable {
     private func icon(bundlePath: String?, id: String, name: String) -> NSImage {
         let key = bundlePath ?? (id == PowerWatchConstants.monitorGroup ? "symbol:monitor" : "symbol:process")
         if let cached = icons[key] { return cached }
-        let source = bundlePath.flatMap { FileManager.default.fileExists(atPath: $0) ? NSWorkspace.shared.icon(forFile: $0) : nil } ?? NSImage(systemSymbolName: id == PowerWatchConstants.monitorGroup ? "bolt.circle.fill" : "gearshape", accessibilityDescription: name)!
+        let source = bundlePath.flatMap { FileManager.default.fileExists(atPath: $0) ? NSWorkspace.shared.icon(forFile: $0) : nil } ?? (id == PowerWatchConstants.monitorGroup ? YooTrackBrand.mark : NSImage(systemSymbolName: "gearshape", accessibilityDescription: name)!)
         let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 64, pixelsHigh: 64, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
         NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
         source.draw(in: NSRect(x: 0, y: 0, width: 64, height: 64)); NSGraphicsContext.restoreGraphicsState()

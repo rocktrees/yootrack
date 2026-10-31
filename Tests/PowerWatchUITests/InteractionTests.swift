@@ -86,6 +86,18 @@ final class InteractionTests: XCTestCase {
             XCTAssertTrue(menu.buttons["menu.consumer.fixture-app-" + reversed].waitForExistence(timeout: 5), column + " reversed")
         }
     }
+    func testQuickMenuCanOpenFromMainWindow() {
+        let openMenu = app.buttons["dashboard.openMenu"]
+        XCTAssertTrue(openMenu.waitForExistence(timeout: 5))
+        openMenu.click()
+        let menu = app.descendants(matching: .any)["quick.menu"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 5))
+        XCTAssertTrue(menu.buttons["menu.consumer.fixture-app-000"].exists)
+        menu.radioButtons["AI Usage"].click()
+        XCTAssertTrue(menu.buttons["menu.provider.cursor"].waitForExistence(timeout: 5))
+        menu.buttons["Open Details"].click()
+        XCTAssertTrue(app.buttons["provider.row.cursor"].waitForExistence(timeout: 5))
+    }
     func testCompactMenuHistoryTab() {
         app.terminate()
         app.launchArguments.append("--test-quick-menu")

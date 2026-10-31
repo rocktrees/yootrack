@@ -27,10 +27,14 @@ YooTrack is one Swift package. The Xcode project is generated from the same sour
 | --- | --- |
 | `scripts/test.sh` | `swift test --disable-sandbox` |
 | `scripts/build.sh` | Release app in `build/YooTrack.app` |
-| `scripts/install-app.sh` | Copies that app to `~/Applications` |
+| `scripts/install-local.sh` | Builds fresh in staging and updates existing YooTrack installations |
+| `scripts/install-app.sh` | Installs an app build into Applications |
 | `scripts/install-helper.sh` / `uninstall-helper.sh` | Administrator collector |
 | `scripts/test-ui.sh` | Regenerates the Xcode project and runs the UI scheme |
 | `scripts/generate-xcode-project.py` | Rebuilds `PowerWatch.xcodeproj` from `Sources/` and `Tests/PowerWatchUITests/` |
+| `scripts/create-icon.swift` | Derives the app icon set and menu-bar template from `Resources/YooTrack-logo-source.png` |
 | `scripts/measure-overhead.py` | Ten-minute CPU and memory check |
+
+To regenerate the logo assets, run `swift scripts/create-icon.swift Resources/YooTrack-logo-source.png /tmp/YooTrack.iconset Resources/YooTrackMark.png`, then `iconutil -c icns /tmp/YooTrack.iconset -o Resources/PowerWatch.icns`.
 
 `doc/` describes how the pieces fit together. `TECH.md` lists the system frameworks and provider endpoints.

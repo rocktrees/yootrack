@@ -17,14 +17,13 @@ The current release builds are **ad-hoc signed and not notarized**. macOS Gateke
 ```sh
 git clone https://github.com/rocktrees/yootrack.git
 cd yootrack
-/bin/sh scripts/build.sh
-/bin/sh scripts/install-app.sh
-open "$HOME/Applications/YooTrack.app"
+/bin/sh scripts/install-local.sh
+open -a YooTrack
 ```
 
-Quit an older running version before installing. The installer puts the app in `~/Applications` and renames the earlier app bundle when needed. On first launch, YooTrack moves its existing history and money data to the YooTrack data folder. Existing settings and Keychain entries retain their internal identifiers. If both data folders already exist, YooTrack uses its own folder and leaves the earlier one untouched. Check launch-at-login settings after upgrading.
+Quit an older running version before installing. The installer updates `/Applications/YooTrack.app` if it exists; otherwise it uses `~/Applications/YooTrack.app`. If both copies exist, the local build script updates both. On first launch, YooTrack moves its existing history and money data to the YooTrack data folder. Existing settings and Keychain entries retain their internal identifiers. If both data folders already exist, YooTrack uses its own folder and leaves the earlier one untouched. Check launch-at-login settings after upgrading.
 
-Click YooTrack in the menu bar to open its popover. Closing the details window leaves the app running; use **Quit YooTrack** in the menu to stop it.
+Click YooTrack in the menu bar to open its popover. You can also use **Open Menu** in the main window if the menu-bar icon is hidden. Closing the details window leaves the app running; use **Quit YooTrack** in the menu to stop it.
 
 ## Optional collector
 

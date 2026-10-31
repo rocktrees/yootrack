@@ -20,11 +20,11 @@ core = sorted((root / "Sources/PowerWatchCore").glob("*.swift"))
 app = sorted((root / "Sources/PowerWatch").glob("*.swift"))
 helper = sorted((root / "Sources/PowerWatchHelper").glob("*.swift"))
 ui_tests = sorted((root / "Tests/PowerWatchUITests").glob("*.swift"))
-scripts = [root / "scripts/install-helper.sh", root / "scripts/uninstall-helper.sh", root / "Resources/PowerWatch.icns"]
+scripts = [root / "scripts/install-helper.sh", root / "scripts/uninstall-helper.sh", root / "Resources/PowerWatch.icns", root / "Resources/YooTrackMark.png"]
 refs = {}
 for path in core + app + helper + ui_tests + scripts + [root / "Resources/Info.plist", root / "Package.swift"]:
     relative = str(path.relative_to(root))
-    refs[path] = add(relative, "{isa=PBXFileReference; path=" + q(relative) + "; sourceTree=SOURCE_ROOT; lastKnownFileType=" + ("sourcecode.swift" if path.suffix == ".swift" else "text.plist.xml" if path.suffix == ".plist" else "image.icns" if path.suffix == ".icns" else "text.script.sh") + ";}")
+    refs[path] = add(relative, "{isa=PBXFileReference; path=" + q(relative) + "; sourceTree=SOURCE_ROOT; lastKnownFileType=" + ("sourcecode.swift" if path.suffix == ".swift" else "text.plist.xml" if path.suffix == ".plist" else "image.icns" if path.suffix == ".icns" else "image.png" if path.suffix == ".png" else "text.script.sh") + ";}")
 app_product = add("app-product", '{isa=PBXFileReference;explicitFileType=wrapper.application;path="YooTrack.app";sourceTree=BUILT_PRODUCTS_DIR;}')
 helper_product = add("helper-product", '{isa=PBXFileReference;explicitFileType="compiled.mach-o.executable";path=PowerWatchHelper;sourceTree=BUILT_PRODUCTS_DIR;}')
 ui_product = add("ui-product", '{isa=PBXFileReference;explicitFileType=wrapper.cfbundle;path=PowerWatchUITests.xctest;sourceTree=BUILT_PRODUCTS_DIR;}')

@@ -86,6 +86,7 @@ private struct ProviderContentHeightKey: PreferenceKey {
 
 struct ProviderMenuSection: View {
     @ObservedObject var model: AppModel
+    var onNavigate: (() -> Void)? = nil
     @State private var contentHeight: CGFloat = 0
     private var maxContentHeight: CGFloat {
         // Leave room for the menu header, section picker and footer on the current screen.
@@ -99,12 +100,12 @@ struct ProviderMenuSection: View {
                 if model.providerBusy { Text("Refreshing").font(.caption2).foregroundStyle(.secondary) }
             }
             if model.providers.isEmpty {
-                Button("Set up AI usage") { model.focusProvider(nil) }.font(.caption).accessibilityIdentifier("menu.provider.setup")
+                Button("Set up AI usage") { model.focusProvider(nil); onNavigate?() }.font(.caption).accessibilityIdentifier("menu.provider.setup")
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(model.providers) { provider in
-                            Button { model.focusProvider(provider.id) } label: {
+                            Button { model.focusProvider(provider.id); onNavigate?() } label: {
                                 let windows = provider.rateWindows.isEmpty ? provider.windows : provider.rateWindows
                                 VStack(alignment: .leading, spacing: 3) {
                                     if windows.isEmpty {
