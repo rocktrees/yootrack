@@ -1,10 +1,21 @@
 import SwiftUI
 import AppKit
 
+enum YooTrackBrand {
+    static let mark: NSImage = {
+        let image = Bundle.main.url(forResource: "YooTrackMark", withExtension: "png").flatMap(NSImage.init(contentsOf:))
+            ?? NSImage(systemSymbolName: "bolt.circle", accessibilityDescription: "YooTrack")!
+        image.isTemplate = true
+        return image
+    }()
+}
+
 final class ApplicationDelegate: NSObject, NSApplicationDelegate {
     static var openDetails: (() -> Void)?
+    static var installStatusBar: (() -> Void)?
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.accessory)
+        Self.installStatusBar?()
         if !CommandLine.arguments.contains("--background") { DispatchQueue.main.async { Self.openDetails?() } }
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -21,9 +32,9 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate {
         let model = CommandLine.arguments.contains("--ui-testing") ? UITestFixtures.makeModel() : AppModel()
         _model = StateObject(wrappedValue: model)
         ApplicationDelegate.openDetails = { [weak model] in model?.openDetails() }
+        ApplicationDelegate.installStatusBar = { [weak model] in model?.installStatusBar() }
     }
     var body: some Scene {
-        MenuBarExtra { QuickMenu(model: model) } label: { Label(model.menuLabel, systemImage: model.paused ? "pause.circle" : "bolt.circle") }
-            .menuBarExtraStyle(.window)
+        Settings { EmptyView() }
     }
 }

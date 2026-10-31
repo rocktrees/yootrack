@@ -6,6 +6,7 @@ import SwiftUI
     private unowned let model: AppModel
     private var window: NSWindow?
     private var preferences: NSWindow?
+    private var quickMenu: NSWindow?
     init(model: AppModel) { self.model = model }
     func show() {
         if let window { window.makeKeyAndOrderFront(nil); NSApplication.shared.activate(ignoringOtherApps: true); return }
@@ -33,8 +34,20 @@ import SwiftUI
         preferences.contentView = NSHostingView(rootView: Preferences(model: model)); preferences.center()
         self.preferences = preferences; preferences.makeKeyAndOrderFront(nil); NSApplication.shared.activate(ignoringOtherApps: true)
     }
+    func showQuickMenu() {
+        if let quickMenu { quickMenu.makeKeyAndOrderFront(nil); NSApplication.shared.activate(ignoringOtherApps: true); return }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 620), styleMask: [.titled, .closable, .resizable, .utilityWindow], backing: .buffered, defer: false)
+        window.title = "YooTrack Menu"; window.isReleasedWhenClosed = false; window.delegate = self
+        window.contentView = NSHostingView(rootView: QuickMenu(model: model, onNavigate: { [weak self] in self?.quickMenu?.close() }))
+        window.minSize = NSSize(width: 520, height: 400)
+        window.center(); quickMenu = window
+        window.makeKeyAndOrderFront(nil); NSApplication.shared.activate(ignoringOtherApps: true)
+    }
     func windowWillClose(_ notification: Notification) {
-        if notification.object as? NSWindow === preferences {
+        if notification.object as? NSWindow === quickMenu {
+            quickMenu?.contentView = nil; quickMenu?.delegate = nil; quickMenu = nil
+            model.visibility("menu", isVisible: false)
+        } else if notification.object as? NSWindow === preferences {
             preferences?.contentView = nil; preferences?.delegate = nil; preferences = nil
             model.visibility("settings", isVisible: false)
         } else {

@@ -80,6 +80,7 @@ private struct SortColumn: View {
 
 struct QuickMenu: View {
     @ObservedObject var model: AppModel
+    var onNavigate: (() -> Void)? = nil
     private enum Section: String, CaseIterable, Identifiable {
         case processes = "Processes", aiUsage = "AI Usage", budget = "Budget"
         var id: String { rawValue }
@@ -88,7 +89,7 @@ struct QuickMenu: View {
     @State private var processTab = 0
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack { Image(systemName: "bolt.circle.fill").foregroundStyle(.teal); Text("YooTrack").font(.headline); Spacer(); Text(model.menuLabel).font(.caption).monospacedDigit() }
+            HStack { Image(nsImage: YooTrackBrand.mark).resizable().renderingMode(.template).frame(width: 20, height: 20).foregroundStyle(.teal); Text("YooTrack").font(.headline); Spacer(); Text(model.menuLabel).font(.caption).monospacedDigit() }
             Picker("Section", selection: $section) { ForEach(Section.allCases) { Text($0.rawValue).tag($0) } }
                 .pickerStyle(.segmented).accessibilityIdentifier("menu.section")
             switch section {
@@ -98,9 +99,9 @@ struct QuickMenu: View {
                 if processTab == 0 { liveContent } else { historyContent }
                 if !model.helperConnected { Text(model.setupBusy ? "Installing collector…" : "Basic monitoring · collector not connected").font(.caption).foregroundStyle(.orange) }
             case .aiUsage:
-                ProviderMenuSection(model: model)
+                ProviderMenuSection(model: model, onNavigate: onNavigate)
             case .budget:
-                BudgetMenuSection(model: model)
+                BudgetMenuSection(model: model, onNavigate: onNavigate)
             }
             Divider()
             HStack {
@@ -176,6 +177,7 @@ struct QuickMenu: View {
                                 model.select(app: row.id)
                                 model.requestedHubTab = 1
                                 model.openDetails()
+                                onNavigate?()
                             } label: {
                                 HStack {
                                     Image(nsImage: model.icon(for: row)).resizable().frame(width: 20, height: 20).accessibilityHidden(true)
@@ -200,6 +202,7 @@ struct QuickMenu: View {
         case .budget: model.requestedHubTab = 3
         }
         model.openDetails()
+        onNavigate?()
     }
 }
 
@@ -256,7 +259,7 @@ struct Dashboard: View {
     }
     private var header: some View {
         HStack(spacing: 18) {
-            Image(systemName: "bolt.circle.fill").font(.system(size: 32)).foregroundStyle(.teal)
+            Image(nsImage: YooTrackBrand.mark).resizable().renderingMode(.template).frame(width: 32, height: 32).foregroundStyle(.teal)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("YooTrack").font(.title2.bold())
@@ -267,6 +270,8 @@ struct Dashboard: View {
             Spacer()
             VStack(alignment: .trailing) { Text(model.menuLabel).font(.title3).monospacedDigit(); Text((model.sample?.battery?.dischargeWatts ?? 0) > 0 ? (model.sample?.battery?.onBattery == true ? "Battery discharge" : "Battery discharge · plugged in") : "Connected to power").font(.caption).foregroundStyle(.secondary) }
             VStack { Text("GPU " + Display.decimal(model.sample?.gpu?.utilizationPercent, suffix: "%")).monospacedDigit(); Button("Overview") { model.select(app: nil) }.font(.caption) }
+            Button("Open Menu") { model.openQuickMenu() }
+                .accessibilityIdentifier("dashboard.openMenu")
             Button(model.paused ? "Resume" : "Pause") { model.togglePause() }
             Button { model.openPreferences() } label: { Image(systemName: "gearshape") }.help("Settings")
         }.padding(18)
@@ -737,6 +742,7 @@ struct Preferences: View {
     var body: some View {
         Form {
             Section("Monitoring") {
+                Text("If macOS hides the icon in a crowded menu bar, use Open Menu in the main window.").font(.caption).foregroundStyle(.secondary)
                 Toggle("Launch at login", isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
                 Text("Samples every 15 seconds in the background and 5 seconds while a view is open. Collection pauses during sleep.").font(.caption).foregroundStyle(.secondary)
                 Button(model.paused ? "Resume monitoring" : "Pause monitoring") { model.togglePause() }
