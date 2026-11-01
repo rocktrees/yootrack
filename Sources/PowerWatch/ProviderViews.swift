@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 import AppKit
 #if SWIFT_PACKAGE
 import PowerWatchCore
@@ -89,6 +90,7 @@ struct ProviderMenuSection: View {
     var onNavigate: (() -> Void)? = nil
     @State private var contentHeight: CGFloat = 0
     @State private var search = ""
+    @State private var cursorExpanded = false
     private var matches: [ProviderStatus] {
         model.providers.filter { provider in
             SearchFilter.matches(search, fields: [provider.name, provider.plan, provider.source]) ||
@@ -136,6 +138,11 @@ struct ProviderMenuSection: View {
                                 }.padding(.vertical, 3)
                             }.buttonStyle(FullRowButtonStyle()).accessibilityIdentifier("menu.provider." + provider.id)
                                 .help(provider.error ?? provider.source)
+                            if provider.id == "cursor" {
+                                Button(cursorExpanded ? "Hide weekly usage" : "Show weekly usage") { cursorExpanded.toggle() }
+                                    .font(.caption).accessibilityIdentifier("menu.cursor.weekly.toggle")
+                                if cursorExpanded { CursorWeeklyUsageView() }
+                            }
                             Divider()
                         }
                     }.fixedSize(horizontal: false, vertical: true)
@@ -240,6 +247,7 @@ struct ProviderDetail: View {
                 if let error = provider.error { Text(error).font(.callout).foregroundStyle(.orange).textSelection(.enabled) }
                 if provider.windows.isEmpty { Text("No remaining-usage window yet.").foregroundStyle(.secondary) }
                 ForEach(provider.windows) { window in windowCard(window) }
+                if provider.id == "cursor" { CursorWeeklyUsageView() }
                 if !provider.tokens.isEmpty { tokens(provider) }
                 if let budget = provider.budgetUSD, provider.monthCostUSD == nil, !provider.id.hasPrefix("manual:") {
                     Text(String(format: "Monthly budget $%.2f is saved. Dollar spend appears when the provider returns it.", budget)).font(.caption).foregroundStyle(.secondary)
@@ -321,5 +329,131 @@ struct ProviderDetail: View {
         let used = ProviderDisplay.amount(draft.manualUsed) ?? 0
         let limit = ProviderDisplay.amount(draft.manualLimit) ?? 0
         model.updateAllowance(ManualAllowance(id: current.id, name: current.name, used: used, limit: limit, unit: current.unit))
+    }
+}
+
+private struct CursorChartRow: Identifiable {
+    let id: String
+    let day: Int
+    let model: String
+    let value: Double
+    let start: Double
+    var end: Double { start + value }
+}
+
+struct CursorWeeklyUsageView: View {
+    @State private var week = CursorUsageHistory.weekStart(Date())
+    @State private var metric = "Tokens"
+    @State private var events: [CursorUsageEvent] = []
+    @State private var loading = false
+    @State private var error: String?
+    @State private var hoveredRow: CursorChartRow?
+    @State private var hoverLocation: CGPoint = .zero
+    private let calendar = Calendar.current
+    private let days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    private var end: Date { calendar.date(byAdding: .day, value: 7, to: week) ?? week }
+    private var rows: [CursorChartRow] {
+        var values: [Int: [String: Double]] = [:]
+        for event in events {
+            let day = calendar.component(.weekday, from: event.date) - 1
+            guard (0...6).contains(day), let value = metric == "Tokens" ? event.tokens : event.costUSD, value > 0 else { continue }
+            values[day, default: [:]][event.model, default: 0] += value
+        }
+        return (0..<7).flatMap { day -> [CursorChartRow] in
+            var start = 0.0
+            return (values[day] ?? [:]).sorted { $0.key < $1.key }.map { model, amount in
+                let row = CursorChartRow(id: "\(day)|\(model)", day: day, model: model, value: amount, start: start)
+                start += amount
+                return row
+            }
+        }
+    }
+    private func value(_ number: Double) -> String {
+        metric == "Tokens" ? ProviderDisplay.count(number) : String(format: "$%.2f", number)
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Button { move(-7) } label: { Image(systemName: "chevron.left") }.help("Previous week")
+                Spacer()
+                Text(week.formatted(.dateTime.month(.abbreviated).day()) + " – " + (calendar.date(byAdding: .day, value: 6, to: week) ?? week).formatted(.dateTime.month(.abbreviated).day().year())).font(.caption)
+                Spacer()
+                Button { move(7) } label: { Image(systemName: "chevron.right") }.help("Next week").disabled(week >= CursorUsageHistory.weekStart(Date()))
+            }
+            Picker("Metric", selection: $metric) { Text("Tokens").tag("Tokens"); Text("Cost").tag("Cost") }.pickerStyle(.segmented)
+                .onChange(of: metric) { _, _ in hoveredRow = nil }
+            if loading { ProgressView().controlSize(.small) }
+            else if let error { Text(error).foregroundStyle(.orange).font(.caption) }
+            else if events.isEmpty { Text("No usage in this week.").font(.caption).foregroundStyle(.secondary) }
+            else {
+                Chart {
+                    ForEach(rows) { row in
+                        BarMark(x: .value("Day", days[row.day]), yStart: .value("Start", row.start), yEnd: .value("End", row.end))
+                            .foregroundStyle(by: .value("Model", row.model))
+                    }
+                    ForEach(0..<7, id: \.self) { day in
+                        let total = rows.filter { $0.day == day }.reduce(0) { $0 + $1.value }
+                        if total > 0 {
+                            PointMark(x: .value("Day", days[day]), y: .value(metric, total))
+                                .symbolSize(0).foregroundStyle(.clear)
+                                .annotation(position: .top) { Text(value(total)).font(.caption2) }
+                        }
+                    }
+                }
+                .chartXScale(domain: days)
+                .frame(height: 150)
+                .chartLegend(position: .bottom, alignment: .leading)
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        if let frame = proxy.plotFrame {
+                            let plot = geometry[frame]
+                            Rectangle().fill(.clear).contentShape(Rectangle())
+                                .onContinuousHover { phase in
+                                    switch phase {
+                                    case .active(let point):
+                                        let x = point.x - plot.minX
+                                        let y = point.y - plot.minY
+                                        guard plot.contains(point), let dayName: String = proxy.value(atX: x),
+                                              let day = days.firstIndex(of: dayName),
+                                              let center = proxy.position(forX: dayName), abs(center - x) < plot.width / 14 * 0.8,
+                                              let height: Double = proxy.value(atY: y) else { hoveredRow = nil; return }
+                                        hoveredRow = rows.first { $0.day == day && height >= $0.start && height <= $0.end }
+                                        hoverLocation = point
+                                    case .ended: hoveredRow = nil
+                                    }
+                                }
+                            if let row = hoveredRow {
+                                Text("\(days[row.day]) · \(row.model)\n\(value(row.value))")
+                                    .font(.caption2).padding(6)
+                                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 5))
+                                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(.secondary.opacity(0.3)))
+                                    .fixedSize().position(x: min(max(hoverLocation.x, 80), max(80, geometry.size.width - 80)), y: max(25, hoverLocation.y - 32))
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                    }
+                }
+                .accessibilityIdentifier("cursor.weekly.chart")
+                if events.contains(where: { metric == "Tokens" ? $0.tokens == nil : $0.costUSD == nil }) {
+                    Text("Some events have no \(metric.lowercased()) data; totals are incomplete.").font(.caption2).foregroundStyle(.orange)
+                }
+                if metric == "Cost" { Text("Cursor event cost; included usage may not be an extra charge.").font(.caption2).foregroundStyle(.secondary) }
+            }
+        }.padding(8).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+        .task(id: week) {
+            loading = true; error = nil; events = []; hoveredRow = nil
+            do {
+                let result = try await CursorUsageHistory.load(start: week, end: end)
+                guard !Task.isCancelled else { return }
+                events = result
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.error = (error as? ProviderFetchError)?.message ?? "Could not load Cursor usage history."
+            }
+            loading = false
+        }
+    }
+    private func move(_ days: Int) {
+        if let date = calendar.date(byAdding: .day, value: days, to: week) { week = date }
     }
 }
