@@ -619,3 +619,73 @@ public enum ProviderUsageService {
         } catch { return nil }
     }
 }
+
+/// A dashboard usage event. Missing values stay missing rather than being treated as zero.
+public struct CursorUsageEvent: Equatable, Sendable {
+    public let date: Date
+    public let model: String
+    public let tokens: Double?
+    /// Cursor's event-level charged cost in USD; this is not necessarily an out-of-pocket charge.
+    public let costUSD: Double?
+}
+
+public enum CursorUsageHistory {
+    public static func weekStart(_ date: Date, calendar: Calendar = .current) -> Date {
+        let day = calendar.startOfDay(for: date)
+        return calendar.date(byAdding: .day, value: -(calendar.component(.weekday, from: day) - 1), to: day) ?? day
+    }
+
+    public static func parsePage(_ data: Data) throws -> (events: [CursorUsageEvent], count: Int) {
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rows = root["usageEventsDisplay"] as? [[String: Any]],
+              let count = (root["totalUsageEventsCount"] as? NSNumber)?.intValue, count >= 0 else {
+            throw ProviderFetchError(status: 0, message: "Cursor returned an unreadable usage history.")
+        }
+        let events = try rows.map { row -> CursorUsageEvent in
+            guard let rawDate = row["timestamp"], let milliseconds = Double(String(describing: rawDate)), milliseconds.isFinite,
+                  let model = row["model"] as? String, !model.isEmpty else {
+                throw ProviderFetchError(status: 0, message: "Cursor returned an incomplete usage event.")
+            }
+            let usage = row["tokenUsage"] as? [String: Any]
+            let names = ["inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens"]
+            let values = names.compactMap { (usage?[$0] as? NSNumber)?.doubleValue }
+            let tokens: Double? = values.isEmpty ? nil : values.reduce(0, +)
+            let cents = (row["chargedCents"] as? NSNumber)?.doubleValue
+            return CursorUsageEvent(date: Date(timeIntervalSince1970: milliseconds / 1000), model: model, tokens: tokens, costUSD: cents.map { $0 / 100 })
+        }
+        return (events, count)
+    }
+
+    public static func load(start: Date, end: Date, environment: ProviderEnvironment = .live) async throws -> [CursorUsageEvent] {
+        guard let token = CursorAuth.accessToken(database: environment.home.appendingPathComponent("Library/Application Support/Cursor/User/globalStorage/state.vscdb")) else {
+            throw ProviderFetchError(status: 0, message: "Sign in to Cursor on this Mac to see usage history.")
+        }
+        let parts = token.split(separator: ".")
+        guard parts.count > 1 else { throw ProviderFetchError(status: 0, message: "Cursor's session cannot open usage history.") }
+        var payload = String(parts[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        payload += String(repeating: "=", count: (4 - payload.count % 4) % 4)
+        guard let bytes = Data(base64Encoded: payload), let object = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+              var subject = object["sub"] as? String else { throw ProviderFetchError(status: 0, message: "Cursor's session cannot open usage history.") }
+        if subject.hasPrefix("auth0|") { subject = String(subject.dropFirst(6)) }
+        guard let cookie = (subject + "::" + token).addingPercentEncoding(withAllowedCharacters: .alphanumerics) else { throw ProviderFetchError(status: 0, message: "Cursor's session cannot open usage history.") }
+        var all: [CursorUsageEvent] = []
+        let pageSize = 100
+        for page in 1...100 {
+            var request = URLRequest(url: URL(string: "https://cursor.com/api/dashboard/get-filtered-usage-events")!)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("https://cursor.com", forHTTPHeaderField: "Origin")
+            request.setValue("WorkosCursorSessionToken=" + cookie, forHTTPHeaderField: "Cookie")
+            request.httpBody = try JSONSerialization.data(withJSONObject: ["startDate": String(Int64(start.timeIntervalSince1970 * 1000)), "endDate": String(Int64(end.timeIntervalSince1970 * 1000) - 1), "page": page, "pageSize": pageSize])
+            switch await environment.fetch(request) {
+            case .failure(let error): throw error
+            case .success(let data):
+                let result = try parsePage(data)
+                all.append(contentsOf: result.events)
+                if all.count >= result.count { return all.filter { $0.date >= start && $0.date < end } }
+                if result.events.isEmpty { throw ProviderFetchError(status: 0, message: "Cursor returned an incomplete usage history.") }
+            }
+        }
+        throw ProviderFetchError(status: 0, message: "This week has too many events to display completely.")
+    }
+}

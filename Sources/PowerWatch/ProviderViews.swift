@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 import AppKit
 #if SWIFT_PACKAGE
 import PowerWatchCore
@@ -89,6 +90,7 @@ struct ProviderMenuSection: View {
     var onNavigate: (() -> Void)? = nil
     @State private var contentHeight: CGFloat = 0
     @State private var search = ""
+    @State private var cursorExpanded = false
     private var matches: [ProviderStatus] {
         model.providers.filter { provider in
             SearchFilter.matches(search, fields: [provider.name, provider.plan, provider.source]) ||
@@ -136,6 +138,11 @@ struct ProviderMenuSection: View {
                                 }.padding(.vertical, 3)
                             }.buttonStyle(FullRowButtonStyle()).accessibilityIdentifier("menu.provider." + provider.id)
                                 .help(provider.error ?? provider.source)
+                            if provider.id == "cursor" {
+                                Button(cursorExpanded ? "Hide weekly usage" : "Show weekly usage") { cursorExpanded.toggle() }
+                                    .font(.caption).accessibilityIdentifier("menu.cursor.weekly.toggle")
+                                if cursorExpanded { CursorWeeklyUsageView() }
+                            }
                             Divider()
                         }
                     }.fixedSize(horizontal: false, vertical: true)
@@ -321,5 +328,104 @@ struct ProviderDetail: View {
         let used = ProviderDisplay.amount(draft.manualUsed) ?? 0
         let limit = ProviderDisplay.amount(draft.manualLimit) ?? 0
         model.updateAllowance(ManualAllowance(id: current.id, name: current.name, used: used, limit: limit, unit: current.unit))
+    }
+}
+
+private struct CursorChartRow: Identifiable {
+    let id: String
+    let day: Int
+    let model: String
+    let value: Double
+}
+
+struct CursorWeeklyUsageView: View {
+    @State private var week = CursorUsageHistory.weekStart(Date())
+    @State private var metric = "Tokens"
+    @State private var events: [CursorUsageEvent] = []
+    @State private var loading = false
+    @State private var error: String?
+    @State private var selectedDay: Int?
+    private let calendar = Calendar.current
+    private let days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    private var end: Date { calendar.date(byAdding: .day, value: 7, to: week) ?? week }
+    private var rows: [CursorChartRow] {
+        var values: [String: Double] = [:]
+        for event in events {
+            let day = calendar.component(.weekday, from: event.date) - 1
+            guard (0...6).contains(day), let value = metric == "Tokens" ? event.tokens : event.costUSD else { continue }
+            values["\(day)|\(event.model)", default: 0] += value
+        }
+        return values.keys.sorted().compactMap { key in
+            let parts = key.split(separator: "|", maxSplits: 1).map(String.init)
+            guard parts.count == 2, let day = Int(parts[0]), let value = values[key] else { return nil }
+            return CursorChartRow(id: key, day: day, model: parts[1], value: value)
+        }
+    }
+    private func value(_ number: Double) -> String {
+        metric == "Tokens" ? ProviderDisplay.count(number) : String(format: "$%.2f", number)
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Button { move(-7) } label: { Image(systemName: "chevron.left") }.help("Previous week")
+                Spacer()
+                Text(week.formatted(.dateTime.month(.abbreviated).day()) + " – " + (calendar.date(byAdding: .day, value: 6, to: week) ?? week).formatted(.dateTime.month(.abbreviated).day().year())).font(.caption)
+                Spacer()
+                Button { move(7) } label: { Image(systemName: "chevron.right") }.help("Next week").disabled(week >= CursorUsageHistory.weekStart(Date()))
+            }
+            Picker("Metric", selection: $metric) { Text("Tokens").tag("Tokens"); Text("Cost").tag("Cost") }.pickerStyle(.segmented)
+            if loading { ProgressView().controlSize(.small) }
+            else if let error { Text(error).foregroundStyle(.orange).font(.caption) }
+            else if events.isEmpty { Text("No usage in this week.").font(.caption).foregroundStyle(.secondary) }
+            else {
+                Chart {
+                    ForEach(rows) { row in
+                        BarMark(x: .value("Day", days[row.day]), y: .value(metric, row.value))
+                            .foregroundStyle(by: .value("Model", row.model))
+                    }
+                    ForEach(0..<7, id: \.self) { day in
+                        let total = rows.filter { $0.day == day }.reduce(0) { $0 + $1.value }
+                        if total > 0 {
+                            PointMark(x: .value("Day", days[day]), y: .value(metric, total))
+                                .symbolSize(0).foregroundStyle(.clear)
+                                .annotation(position: .top) { Text(value(total)).font(.caption2) }
+                        }
+                    }
+                }
+                .chartXScale(domain: days)
+                .frame(height: 150)
+                .chartLegend(position: .bottom, alignment: .leading)
+                HStack(spacing: 2) {
+                    ForEach(0..<7, id: \.self) { day in
+                        Button(days[day]) { selectedDay = day }.font(.caption2).frame(maxWidth: .infinity)
+                            .accessibilityLabel("Show \(days[day]) breakdown")
+                    }
+                }
+                if let selectedDay {
+                    let dayRows = rows.filter { $0.day == selectedDay }
+                    Text("\(days[selectedDay]): \(value(dayRows.reduce(0) { $0 + $1.value }))").font(.caption.bold())
+                    ForEach(dayRows) { row in Text("\(row.model): \(value(row.value))").font(.caption2) }
+                }
+                if events.contains(where: { metric == "Tokens" ? $0.tokens == nil : $0.costUSD == nil }) {
+                    Text("Some events have no \(metric.lowercased()) data; totals are incomplete.").font(.caption2).foregroundStyle(.orange)
+                }
+                if metric == "Cost" { Text("Cursor event cost; included usage may not be an extra charge.").font(.caption2).foregroundStyle(.secondary) }
+            }
+        }.padding(8).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+        .task(id: week) {
+            loading = true; error = nil; events = []; selectedDay = nil
+            do {
+                let result = try await CursorUsageHistory.load(start: week, end: end)
+                guard !Task.isCancelled else { return }
+                events = result
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.error = (error as? ProviderFetchError)?.message ?? "Could not load Cursor usage history."
+            }
+            loading = false
+        }
+    }
+    private func move(_ days: Int) {
+        if let date = calendar.date(byAdding: .day, value: days, to: week) { week = date }
     }
 }

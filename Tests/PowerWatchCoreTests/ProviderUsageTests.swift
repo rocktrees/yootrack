@@ -195,3 +195,27 @@ final class ProviderUsageTests: XCTestCase {
         return url
     }
 }
+
+final class CursorUsageHistoryTests: XCTestCase {
+    func testParsesEventsAndPreservesMissingMetrics() throws {
+        let data = Data(#"{"totalUsageEventsCount":2,"usageEventsDisplay":[{"timestamp":"1762041600000","model":"Composer","tokenUsage":{"inputTokens":10,"outputTokens":2,"cacheReadTokens":5,"cacheWriteTokens":3},"chargedCents":125},{"timestamp":"1762041700000","model":"Auto"}]}"#.utf8)
+        let page = try CursorUsageHistory.parsePage(data)
+        XCTAssertEqual(page.count, 2)
+        XCTAssertEqual(page.events[0].tokens, 20)
+        XCTAssertEqual(page.events[0].costUSD, 1.25)
+        XCTAssertNil(page.events[1].tokens)
+        XCTAssertNil(page.events[1].costUSD)
+    }
+    func testRejectsMalformedHistory() {
+        XCTAssertThrowsError(try CursorUsageHistory.parsePage(Data(#"{"usageEventsDisplay":[{}],"totalUsageEventsCount":1}"#.utf8)))
+    }
+    func testWeekAlwaysStartsSundayAcrossDST() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Chicago"))
+        let date = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 3, hour: 12)))
+        let start = CursorUsageHistory.weekStart(date, calendar: calendar)
+        XCTAssertEqual(calendar.component(.weekday, from: start), 1)
+        XCTAssertEqual(calendar.component(.day, from: start), 1)
+        XCTAssertEqual(calendar.component(.hour, from: start), 0)
+    }
+}
