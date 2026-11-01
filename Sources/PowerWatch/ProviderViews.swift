@@ -341,16 +341,6 @@ private struct CursorChartRow: Identifiable {
     var end: Double { start + value }
 }
 
-private struct CursorModelTotal: Identifiable {
-    let id: String
-    var tokens: Double = 0
-    var cost: Double = 0
-    var tokensKnown = false
-    var costKnown = false
-    var tokensMissing = false
-    var costMissing = false
-}
-
 struct CursorWeeklyUsageView: View {
     @State private var week = CursorUsageHistory.weekStart(Date())
     @State private var metric = "Tokens"
@@ -378,25 +368,6 @@ struct CursorWeeklyUsageView: View {
             }
         }
     }
-    private var topModels: [CursorModelTotal] {
-        var totals: [String: CursorModelTotal] = [:]
-        for event in events {
-            var total = totals[event.model] ?? CursorModelTotal(id: event.model)
-            if let tokens = event.tokens { total.tokens += tokens; total.tokensKnown = true } else { total.tokensMissing = true }
-            if let cost = event.costUSD { total.cost += cost; total.costKnown = true } else { total.costMissing = true }
-            totals[event.model] = total
-        }
-        return totals.values.sorted {
-            let left = metric == "Tokens" ? $0.tokens : $0.cost
-            let right = metric == "Tokens" ? $1.tokens : $1.cost
-            return left == right ? $0.id < $1.id : left > right
-        }.prefix(3).map { $0 }
-    }
-    private func totalText(_ value: Double, known: Bool, missing: Bool, cost: Bool) -> String {
-        guard known else { return "—" }
-        let formatted = cost ? String(format: "$%.2f", value) : ProviderDisplay.count(value)
-        return (missing ? "≥" : "") + formatted
-    }
     private func value(_ number: Double) -> String {
         metric == "Tokens" ? ProviderDisplay.count(number) : String(format: "$%.2f", number)
     }
@@ -415,25 +386,6 @@ struct CursorWeeklyUsageView: View {
             else if let error { Text(error).foregroundStyle(.orange).font(.caption) }
             else if events.isEmpty { Text("No usage in this week.").font(.caption).foregroundStyle(.secondary) }
             else {
-                Text("Top models · by \(metric.lowercased())").font(.caption.bold())
-                HStack(alignment: .bottom, spacing: 4) {
-                    ForEach([1, 0, 2], id: \.self) { rank in
-                        if rank < topModels.count {
-                            let model = topModels[rank]
-                            VStack(spacing: 3) {
-                                Text("#\(rank + 1)").font(.caption.bold())
-                                Text(model.id).font(.caption2.bold()).lineLimit(1).help(model.id)
-                                Text(totalText(model.tokens, known: model.tokensKnown, missing: model.tokensMissing, cost: false) + " tok").font(.caption2)
-                                Text(totalText(model.cost, known: model.costKnown, missing: model.costMissing, cost: true)).font(.caption2)
-                            }
-                            .frame(maxWidth: .infinity).padding(.vertical, 7)
-                            .frame(minHeight: rank == 0 ? 82 : 68)
-                            .background(Color.teal.opacity(rank == 0 ? 0.24 : 0.12), in: RoundedRectangle(cornerRadius: 6))
-                        } else {
-                            Color.clear.frame(maxWidth: .infinity).frame(height: 68)
-                        }
-                    }
-                }.accessibilityIdentifier("cursor.weekly.podium")
                 Chart {
                     ForEach(rows) { row in
                         BarMark(x: .value("Day", days[row.day]), yStart: .value("Start", row.start), yEnd: .value("End", row.end))
