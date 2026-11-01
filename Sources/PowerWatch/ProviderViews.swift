@@ -247,6 +247,7 @@ struct ProviderDetail: View {
                 if let error = provider.error { Text(error).font(.callout).foregroundStyle(.orange).textSelection(.enabled) }
                 if provider.windows.isEmpty { Text("No remaining-usage window yet.").foregroundStyle(.secondary) }
                 ForEach(provider.windows) { window in windowCard(window) }
+                if provider.id == "cursor" { CursorWeeklyUsageView() }
                 if !provider.tokens.isEmpty { tokens(provider) }
                 if let budget = provider.budgetUSD, provider.monthCostUSD == nil, !provider.id.hasPrefix("manual:") {
                     Text(String(format: "Monthly budget $%.2f is saved. Dollar spend appears when the provider returns it.", budget)).font(.caption).foregroundStyle(.secondary)
@@ -336,6 +337,18 @@ private struct CursorChartRow: Identifiable {
     let day: Int
     let model: String
     let value: Double
+    let start: Double
+    var end: Double { start + value }
+}
+
+private struct CursorModelTotal: Identifiable {
+    let id: String
+    var tokens: Double = 0
+    var cost: Double = 0
+    var tokensKnown = false
+    var costKnown = false
+    var tokensMissing = false
+    var costMissing = false
 }
 
 struct CursorWeeklyUsageView: View {
@@ -344,22 +357,45 @@ struct CursorWeeklyUsageView: View {
     @State private var events: [CursorUsageEvent] = []
     @State private var loading = false
     @State private var error: String?
-    @State private var selectedDay: Int?
+    @State private var hoveredRow: CursorChartRow?
+    @State private var hoverLocation: CGPoint = .zero
     private let calendar = Calendar.current
     private let days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
     private var end: Date { calendar.date(byAdding: .day, value: 7, to: week) ?? week }
     private var rows: [CursorChartRow] {
-        var values: [String: Double] = [:]
+        var values: [Int: [String: Double]] = [:]
         for event in events {
             let day = calendar.component(.weekday, from: event.date) - 1
-            guard (0...6).contains(day), let value = metric == "Tokens" ? event.tokens : event.costUSD else { continue }
-            values["\(day)|\(event.model)", default: 0] += value
+            guard (0...6).contains(day), let value = metric == "Tokens" ? event.tokens : event.costUSD, value > 0 else { continue }
+            values[day, default: [:]][event.model, default: 0] += value
         }
-        return values.keys.sorted().compactMap { key in
-            let parts = key.split(separator: "|", maxSplits: 1).map(String.init)
-            guard parts.count == 2, let day = Int(parts[0]), let value = values[key] else { return nil }
-            return CursorChartRow(id: key, day: day, model: parts[1], value: value)
+        return (0..<7).flatMap { day -> [CursorChartRow] in
+            var start = 0.0
+            return (values[day] ?? [:]).sorted { $0.key < $1.key }.map { model, amount in
+                let row = CursorChartRow(id: "\(day)|\(model)", day: day, model: model, value: amount, start: start)
+                start += amount
+                return row
+            }
         }
+    }
+    private var topModels: [CursorModelTotal] {
+        var totals: [String: CursorModelTotal] = [:]
+        for event in events {
+            var total = totals[event.model] ?? CursorModelTotal(id: event.model)
+            if let tokens = event.tokens { total.tokens += tokens; total.tokensKnown = true } else { total.tokensMissing = true }
+            if let cost = event.costUSD { total.cost += cost; total.costKnown = true } else { total.costMissing = true }
+            totals[event.model] = total
+        }
+        return totals.values.sorted {
+            let left = metric == "Tokens" ? $0.tokens : $0.cost
+            let right = metric == "Tokens" ? $1.tokens : $1.cost
+            return left == right ? $0.id < $1.id : left > right
+        }.prefix(3).map { $0 }
+    }
+    private func totalText(_ value: Double, known: Bool, missing: Bool, cost: Bool) -> String {
+        guard known else { return "—" }
+        let formatted = cost ? String(format: "$%.2f", value) : ProviderDisplay.count(value)
+        return (missing ? "≥" : "") + formatted
     }
     private func value(_ number: Double) -> String {
         metric == "Tokens" ? ProviderDisplay.count(number) : String(format: "$%.2f", number)
@@ -374,13 +410,33 @@ struct CursorWeeklyUsageView: View {
                 Button { move(7) } label: { Image(systemName: "chevron.right") }.help("Next week").disabled(week >= CursorUsageHistory.weekStart(Date()))
             }
             Picker("Metric", selection: $metric) { Text("Tokens").tag("Tokens"); Text("Cost").tag("Cost") }.pickerStyle(.segmented)
+                .onChange(of: metric) { _, _ in hoveredRow = nil }
             if loading { ProgressView().controlSize(.small) }
             else if let error { Text(error).foregroundStyle(.orange).font(.caption) }
             else if events.isEmpty { Text("No usage in this week.").font(.caption).foregroundStyle(.secondary) }
             else {
+                Text("Top models · by \(metric.lowercased())").font(.caption.bold())
+                HStack(alignment: .bottom, spacing: 4) {
+                    ForEach([1, 0, 2], id: \.self) { rank in
+                        if rank < topModels.count {
+                            let model = topModels[rank]
+                            VStack(spacing: 3) {
+                                Text("#\(rank + 1)").font(.caption.bold())
+                                Text(model.id).font(.caption2.bold()).lineLimit(1).help(model.id)
+                                Text(totalText(model.tokens, known: model.tokensKnown, missing: model.tokensMissing, cost: false) + " tok").font(.caption2)
+                                Text(totalText(model.cost, known: model.costKnown, missing: model.costMissing, cost: true)).font(.caption2)
+                            }
+                            .frame(maxWidth: .infinity).padding(.vertical, 7)
+                            .frame(minHeight: rank == 0 ? 82 : 68)
+                            .background(Color.teal.opacity(rank == 0 ? 0.24 : 0.12), in: RoundedRectangle(cornerRadius: 6))
+                        } else {
+                            Color.clear.frame(maxWidth: .infinity).frame(height: 68)
+                        }
+                    }
+                }.accessibilityIdentifier("cursor.weekly.podium")
                 Chart {
                     ForEach(rows) { row in
-                        BarMark(x: .value("Day", days[row.day]), y: .value(metric, row.value))
+                        BarMark(x: .value("Day", days[row.day]), yStart: .value("Start", row.start), yEnd: .value("End", row.end))
                             .foregroundStyle(by: .value("Model", row.model))
                     }
                     ForEach(0..<7, id: \.self) { day in
@@ -395,17 +451,37 @@ struct CursorWeeklyUsageView: View {
                 .chartXScale(domain: days)
                 .frame(height: 150)
                 .chartLegend(position: .bottom, alignment: .leading)
-                HStack(spacing: 2) {
-                    ForEach(0..<7, id: \.self) { day in
-                        Button(days[day]) { selectedDay = day }.font(.caption2).frame(maxWidth: .infinity)
-                            .accessibilityLabel("Show \(days[day]) breakdown")
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        if let frame = proxy.plotFrame {
+                            let plot = geometry[frame]
+                            Rectangle().fill(.clear).contentShape(Rectangle())
+                                .onContinuousHover { phase in
+                                    switch phase {
+                                    case .active(let point):
+                                        let x = point.x - plot.minX
+                                        let y = point.y - plot.minY
+                                        guard plot.contains(point), let dayName: String = proxy.value(atX: x),
+                                              let day = days.firstIndex(of: dayName),
+                                              let center = proxy.position(forX: dayName), abs(center - x) < plot.width / 14 * 0.8,
+                                              let height: Double = proxy.value(atY: y) else { hoveredRow = nil; return }
+                                        hoveredRow = rows.first { $0.day == day && height >= $0.start && height <= $0.end }
+                                        hoverLocation = point
+                                    case .ended: hoveredRow = nil
+                                    }
+                                }
+                            if let row = hoveredRow {
+                                Text("\(days[row.day]) · \(row.model)\n\(value(row.value))")
+                                    .font(.caption2).padding(6)
+                                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 5))
+                                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(.secondary.opacity(0.3)))
+                                    .fixedSize().position(x: min(max(hoverLocation.x, 80), max(80, geometry.size.width - 80)), y: max(25, hoverLocation.y - 32))
+                                    .allowsHitTesting(false)
+                            }
+                        }
                     }
                 }
-                if let selectedDay {
-                    let dayRows = rows.filter { $0.day == selectedDay }
-                    Text("\(days[selectedDay]): \(value(dayRows.reduce(0) { $0 + $1.value }))").font(.caption.bold())
-                    ForEach(dayRows) { row in Text("\(row.model): \(value(row.value))").font(.caption2) }
-                }
+                .accessibilityIdentifier("cursor.weekly.chart")
                 if events.contains(where: { metric == "Tokens" ? $0.tokens == nil : $0.costUSD == nil }) {
                     Text("Some events have no \(metric.lowercased()) data; totals are incomplete.").font(.caption2).foregroundStyle(.orange)
                 }
@@ -413,7 +489,7 @@ struct CursorWeeklyUsageView: View {
             }
         }.padding(8).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
         .task(id: week) {
-            loading = true; error = nil; events = []; selectedDay = nil
+            loading = true; error = nil; events = []; hoveredRow = nil
             do {
                 let result = try await CursorUsageHistory.load(start: week, end: end)
                 guard !Task.isCancelled else { return }
