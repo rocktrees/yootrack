@@ -1,4 +1,6 @@
+import CommonCrypto
 import Foundation
+import LocalAuthentication
 import SQLite3
 import Security
 
@@ -108,6 +110,12 @@ public struct ProviderFetchError: Error, Sendable {
     public init(status: Int, message: String) { self.status = status; self.message = message }
 }
 
+public enum CursorKeychainResult: Sendable, Equatable {
+    case password(String)
+    case interactionRequired
+    case unavailable
+}
+
 public struct ProviderEnvironment: Sendable {
     public var now: @Sendable () -> Date
     public var home: URL
@@ -115,8 +123,10 @@ public struct ProviderEnvironment: Sendable {
     public var read: @Sendable (URL) -> Data?
     public var fetch: @Sendable (URLRequest) async -> Result<Data, ProviderFetchError>
     public var files: @Sendable (URL) -> [ProviderLogFile]
-    public init(now: @escaping @Sendable () -> Date, home: URL, secret: @escaping @Sendable (String) -> String?, read: @escaping @Sendable (URL) -> Data?, fetch: @escaping @Sendable (URLRequest) async -> Result<Data, ProviderFetchError>, files: @escaping @Sendable (URL) -> [ProviderLogFile]) {
-        self.now = now; self.home = home; self.secret = secret; self.read = read; self.fetch = fetch; self.files = files
+    /// Password for Cursor Safe Storage. The Bool is true when a prompt is allowed.
+    public var cursorPassword: @Sendable (Bool) -> CursorKeychainResult
+    public init(now: @escaping @Sendable () -> Date, home: URL, secret: @escaping @Sendable (String) -> String?, read: @escaping @Sendable (URL) -> Data?, fetch: @escaping @Sendable (URLRequest) async -> Result<Data, ProviderFetchError>, files: @escaping @Sendable (URL) -> [ProviderLogFile], cursorPassword: @escaping @Sendable (Bool) -> CursorKeychainResult = { _ in .unavailable }) {
+        self.now = now; self.home = home; self.secret = secret; self.read = read; self.fetch = fetch; self.files = files; self.cursorPassword = cursorPassword
     }
     public static let live = ProviderEnvironment(
         now: { Date() },
@@ -134,7 +144,8 @@ public struct ProviderEnvironment: Sendable {
                 return .success(data)
             } catch { return .failure(ProviderFetchError(status: -1, message: "Could not reach the provider.")) }
         },
-        files: { ProviderUsageService.logs(under: $0) }
+        files: { ProviderUsageService.logs(under: $0) },
+        cursorPassword: { CursorAuth.safeStoragePassword(interactive: $0) }
     )
 }
 
@@ -169,7 +180,11 @@ public struct KeychainSecretStore: Sendable {
 }
 
 public enum CursorAuth {
-    /// Read Cursor's local session without writing its database. A saved YooTrack token wins at the call site.
+    public static let encryptedPrefix = "cursor-safe-storage:v1:"
+    public static let lockedMessage = "Cursor encrypts this session. Choose Refresh and allow YooTrack to read Cursor Safe Storage."
+    public static let unreadableMessage = "Cursor's encrypted session could not be read."
+
+    /// Stored `cursorAuth/accessToken`, without decryption. A saved YooTrack token wins at the call site.
     public static func accessToken(database: URL) -> String? {
         var db: OpaquePointer?
         let encoded = database.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? database.path
@@ -186,6 +201,83 @@ public enum CursorAuth {
         var token = String(cString: bytes).trimmingCharacters(in: .whitespacesAndNewlines)
         if token.hasPrefix("\""), let decoded = try? JSONDecoder().decode(String.self, from: Data(token.utf8)) { token = decoded }
         return token.isEmpty ? nil : token
+    }
+
+    /// Plain sessions skip Keychain. Encrypted sessions decrypt and are not stored.
+    public static func session(database: URL, interactive: Bool, password: @Sendable (Bool) -> CursorKeychainResult) -> (token: String?, error: String?) {
+        guard let stored = accessToken(database: database) else { return (nil, nil) }
+        guard stored.hasPrefix(encryptedPrefix) else { return (stored, nil) }
+        switch password(interactive) {
+        case .password(let secret):
+            guard let token = decrypt(stored, password: secret) else { return (nil, unreadableMessage) }
+            return (token, nil)
+        case .interactionRequired:
+            return (nil, lockedMessage)
+        case .unavailable:
+            return (nil, unreadableMessage)
+        }
+    }
+
+    static func safeStoragePassword(interactive: Bool) -> CursorKeychainResult {
+        var query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "Cursor Safe Storage", kSecAttrAccount as String: "Cursor Key", kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
+        if !interactive {
+            let context = LAContext()
+            context.interactionNotAllowed = true
+            query[kSecUseAuthenticationContext as String] = context
+        }
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        if status == errSecSuccess {
+            guard let data = item as? Data, let value = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return .unavailable }
+            return .password(value)
+        }
+        if status == errSecInteractionNotAllowed || status == errSecUserCanceled || status == errSecAuthFailed { return .interactionRequired }
+        return .unavailable
+    }
+
+    /// Chromium macOS `v10`: PBKDF2-HMAC-SHA1, then AES-128-CBC. The password is not retained.
+    private static func decrypt(_ stored: String, password: String) -> String? {
+        let payload = String(stored.dropFirst(encryptedPrefix.count))
+        guard let data = Data(base64Encoded: payload), data.starts(with: Data("v10".utf8)), data.count > 3 else { return nil }
+        let body = [UInt8](data.dropFirst(3))
+        guard body.count.isMultiple(of: kCCBlockSizeAES128), let key = derivedKey(password) else { return nil }
+        let moved = UnsafeMutablePointer<Int>.allocate(capacity: 1)
+        moved.initialize(to: 0)
+        defer { moved.deinitialize(count: 1); moved.deallocate() }
+        var iv = [UInt8](repeating: 0x20, count: kCCBlockSizeAES128)
+        var output = [UInt8](repeating: 0, count: body.count + kCCBlockSizeAES128)
+        let keyCount = key.count
+        let bodyCount = body.count
+        let outputCount = output.count
+        let status = key.withUnsafeBytes { keyBytes in
+            body.withUnsafeBytes { bodyBytes in
+                iv.withUnsafeMutableBytes { ivBytes in
+                    output.withUnsafeMutableBytes { outputBytes in
+                        CCCrypt(CCOperation(kCCDecrypt), CCAlgorithm(kCCAlgorithmAES), CCOptions(kCCOptionPKCS7Padding), keyBytes.baseAddress, keyCount, ivBytes.baseAddress, bodyBytes.baseAddress, bodyCount, outputBytes.baseAddress, outputCount, moved)
+                    }
+                }
+            }
+        }
+        guard status == kCCSuccess, moved.pointee > 0 else { return nil }
+        let token = String(bytes: output.prefix(moved.pointee), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return token?.isEmpty == false ? token : nil
+    }
+
+    private static func derivedKey(_ password: String) -> [UInt8]? {
+        let passwordBytes = Array(password.utf8)
+        let saltBytes = Array("saltysalt".utf8)
+        var key = [UInt8](repeating: 0, count: kCCKeySizeAES128)
+        let passwordCount = passwordBytes.count
+        let saltCount = saltBytes.count
+        let keyCount = key.count
+        let status: Int32 = passwordBytes.withUnsafeBufferPointer { passwordBuffer in
+            saltBytes.withUnsafeBufferPointer { saltBuffer in
+                key.withUnsafeMutableBufferPointer { keyBuffer in
+                    CCKeyDerivationPBKDF(CCPBKDFAlgorithm(kCCPBKDF2), passwordBuffer.baseAddress.flatMap { UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self) }, passwordCount, saltBuffer.baseAddress, saltCount, CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA1), 1003, keyBuffer.baseAddress, keyCount)
+                }
+            }
+        }
+        return status == kCCSuccess ? key : nil
     }
 }
 
@@ -381,8 +473,8 @@ public enum ProviderUsageParser {
 }
 
 public enum ProviderUsageService {
-    public static func collect(settings: ProviderSettings, environment: ProviderEnvironment = .live) async -> [ProviderStatus] {
-        async let cursor = cursor(settings, environment)
+    public static func collect(settings: ProviderSettings, environment: ProviderEnvironment = .live, cursorInteractive: Bool = false) async -> [ProviderStatus] {
+        async let cursor = cursor(settings, environment, interactive: cursorInteractive)
         async let anthropic = anthropic(settings, environment)
         async let openai = openai(settings, environment)
         let manuals = settings.manual.map { manual($0, now: environment.now()) }
@@ -408,13 +500,13 @@ public enum ProviderUsageService {
         }
     }
 
-    static func cursor(_ settings: ProviderSettings, _ environment: ProviderEnvironment) async -> ProviderStatus {
+    static func cursor(_ settings: ProviderSettings, _ environment: ProviderEnvironment, interactive: Bool) async -> ProviderStatus {
         let now = environment.now()
-        let logins = cursorLogins(environment)
-        var status = base("cursor", "Cursor", source: logins.first?.source ?? "Not connected", budget: settings, now: now)
-        guard !logins.isEmpty else { status.error = "Sign in to Cursor on this Mac. The app and agent CLI share that login."; return status }
+        let found = cursorLogins(environment, interactive: interactive)
+        var status = base("cursor", "Cursor", source: found.logins.first?.source ?? "Not connected", budget: settings, now: now)
+        guard !found.logins.isEmpty else { status.error = found.failure ?? "Sign in to Cursor on this Mac. The app and agent CLI share that login."; return status }
         var lastError: String?
-        for login in logins {
+        for login in found.logins {
             status.source = login.source
             switch await environment.fetch(postJSON(URL(string: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage")!, bearer: login.token)) {
             case .success(let data):
@@ -510,16 +602,17 @@ public enum ProviderUsageService {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed?.isEmpty == false ? trimmed : nil
     }
-    private static func cursorLogins(_ environment: ProviderEnvironment) -> [(token: String, source: String)] {
+    private static func cursorLogins(_ environment: ProviderEnvironment, interactive: Bool) -> (logins: [(token: String, source: String)], failure: String?) {
         var seen = Set<String>()
         var logins: [(String, String)] = []
         func add(_ token: String?, _ source: String) {
             guard let token = cleaned(token), seen.insert(token).inserted else { return }
             logins.append((token, source))
         }
-        add(CursorAuth.accessToken(database: environment.home.appendingPathComponent("Library/Application Support/Cursor/User/globalStorage/state.vscdb")), "Cursor login")
+        let session = CursorAuth.session(database: environment.home.appendingPathComponent("Library/Application Support/Cursor/User/globalStorage/state.vscdb"), interactive: interactive, password: environment.cursorPassword)
+        add(session.token, "Cursor login")
         add(environment.secret("cursor"), "Saved token")
-        return logins
+        return (logins, session.error)
     }
     /// Returns true when the credential produced a plan window or a monthly cost.
     private static func applyClaude(_ status: inout ProviderStatus, token: String, now: Date, environment: ProviderEnvironment) async -> Bool {
@@ -656,9 +749,10 @@ public enum CursorUsageHistory {
         return (events, count)
     }
 
-    public static func load(start: Date, end: Date, environment: ProviderEnvironment = .live) async throws -> [CursorUsageEvent] {
-        guard let token = CursorAuth.accessToken(database: environment.home.appendingPathComponent("Library/Application Support/Cursor/User/globalStorage/state.vscdb")) else {
-            throw ProviderFetchError(status: 0, message: "Sign in to Cursor on this Mac to see usage history.")
+    public static func load(start: Date, end: Date, environment: ProviderEnvironment = .live, interactive: Bool = true) async throws -> [CursorUsageEvent] {
+        let session = CursorAuth.session(database: environment.home.appendingPathComponent("Library/Application Support/Cursor/User/globalStorage/state.vscdb"), interactive: interactive, password: environment.cursorPassword)
+        guard let token = session.token else {
+            throw ProviderFetchError(status: 0, message: session.error ?? "Sign in to Cursor on this Mac to see usage history.")
         }
         let parts = token.split(separator: ".")
         guard parts.count > 1 else { throw ProviderFetchError(status: 0, message: "Cursor's session cannot open usage history.") }

@@ -15,7 +15,7 @@ YooTrack is one Swift package. The Xcode project is generated from the same sour
 
 ## Provider usage
 
-`Sources/PowerWatchCore/ProviderUsage.swift` turns Cursor, Anthropic, OpenAI, and manual allowances into one `ProviderStatus` list. Cursor's token comes from `state.vscdb`, not the login keychain. `autoPercentUsed` and `apiPercentUsed` are the in-house and third-party limits. Codex uses `~/.codex/auth.json`.
+`Sources/PowerWatchCore/ProviderUsage.swift` turns Cursor, Anthropic, OpenAI, and manual allowances into one `ProviderStatus` list. Cursor's token comes from `state.vscdb`. Encrypted sessions are decrypted with the Cursor Safe Storage keychain item and are not stored. `autoPercentUsed` and `apiPercentUsed` are the in-house and third-party limits. Codex uses `~/.codex/auth.json`.
 
 `Sources/PowerWatch/AppModel.swift` polls that list about every 60 seconds while a window is open and every 5 minutes in the background. Battery sampling stays on its own timer.
 

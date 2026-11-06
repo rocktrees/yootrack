@@ -6,7 +6,7 @@ let package = Package(
     products: [.executable(name: "PowerWatch", targets: ["PowerWatch"]),
                .executable(name: "PowerWatchHelper", targets: ["PowerWatchHelper"]),
                .executable(name: "PowerWatchProbe", targets: ["PowerWatchProbe"])],
-    targets: [.target(name: "PowerWatchCore", linkerSettings: [.linkedLibrary("sqlite3"), .linkedFramework("IOKit")]),
+    targets: [.target(name: "PowerWatchCore", linkerSettings: [.linkedLibrary("sqlite3"), .linkedFramework("IOKit"), .linkedFramework("LocalAuthentication"), .linkedFramework("Security")]),
               .executableTarget(name: "PowerWatch", dependencies: ["PowerWatchCore"]),
               .executableTarget(name: "PowerWatchHelper", dependencies: ["PowerWatchCore"]),
               .executableTarget(name: "PowerWatchProbe", dependencies: ["PowerWatchCore"]),

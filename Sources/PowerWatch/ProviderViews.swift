@@ -242,7 +242,7 @@ struct ProviderDetail: View {
                         Text((provider.plan.map { $0 + " · " } ?? "") + provider.source).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button(model.providerBusy ? "Refreshing…" : "Refresh") { model.refreshProviders() }.disabled(model.providerBusy)
+                    Button(model.providerBusy ? "Refreshing…" : "Refresh") { model.refreshProviders(interactive: true) }.disabled(model.providerBusy)
                 }
                 if let error = provider.error { Text(error).font(.callout).foregroundStyle(.orange).textSelection(.enabled) }
                 if provider.windows.isEmpty { Text("No remaining-usage window yet.").foregroundStyle(.secondary) }
@@ -309,7 +309,7 @@ struct ProviderDetail: View {
                     TextField("Monthly budget USD", text: $draft.budgetText).textFieldStyle(.roundedBorder).accessibilityIdentifier("provider.budget")
                     Button("Save budget") { model.updateBudget(id: provider.id, amount: ProviderDisplay.amount(draft.budgetText)) }
                 }
-                Text("Cursor is read from the app session already on this Mac, so this does not ask for your keychain password. In-house is Auto and Composer. 3rd party is API models. Codex uses the ChatGPT login in its auth file. A saved key is only a fallback and stays in Keychain.").font(.caption).foregroundStyle(.secondary)
+                Text("Cursor is read from the app session already on this Mac. Refresh asks once to read Cursor Safe Storage when that session is encrypted; the decrypted session is not stored. In-house is Auto and Composer. 3rd party is API models. Codex uses the ChatGPT login in its auth file. A saved key is only a fallback and stays in Keychain.").font(.caption).foregroundStyle(.secondary)
             }
         }
     }
@@ -443,7 +443,7 @@ struct CursorWeeklyUsageView: View {
         .task(id: week) {
             loading = true; error = nil; events = []; hoveredRow = nil
             do {
-                let result = try await CursorUsageHistory.load(start: week, end: end)
+                let result = try await CursorUsageHistory.load(start: week, end: end, interactive: true)
                 guard !Task.isCancelled else { return }
                 events = result
             } catch {
