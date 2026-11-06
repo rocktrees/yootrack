@@ -762,12 +762,12 @@ struct Preferences: View {
                 Button("Clear History…", role: .destructive) { confirmingClear = true }
             }
             Section("AI usage") {
-                Text("Cursor is read from the app session on this Mac. That login is shared with the agent CLI and does not use the keychain password prompt. In-house and 3rd party limits are shown separately.").font(.caption).foregroundStyle(.secondary)
+                Text("Cursor is read from the app session on this Mac. Refresh may ask once to read Cursor Safe Storage for an encrypted login. The decrypted session is not stored. In-house and 3rd party limits are shown separately.").font(.caption).foregroundStyle(.secondary)
                 ForEach(model.providers) { provider in
                     HStack { Text(provider.name); Spacer(); Text(provider.source).foregroundStyle(.secondary) }
                 }
                 Button("Open AI Usage") { model.focusProvider(nil) }
-                Button(model.providerBusy ? "Refreshing…" : "Refresh now") { model.refreshProviders() }.disabled(model.providerBusy)
+                Button(model.providerBusy ? "Refreshing…" : "Refresh now") { model.refreshProviders(interactive: true) }.disabled(model.providerBusy)
             }
             Section("Money") {
                 Text("Spending and holdings stay in a private ledger on this Mac. Plaid credentials and access tokens stay in Keychain. The Budget section of the menu shows monthly spending and limits when opened.").font(.caption).foregroundStyle(.secondary)

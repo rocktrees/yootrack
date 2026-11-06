@@ -421,7 +421,7 @@ enum QuickMenuSection: String, CaseIterable, Identifiable {
         hubShowsMoney = false
         openDetails()
     }
-    func refreshProviders() {
+    func refreshProviders(interactive: Bool = false) {
         guard monitoringEnabled else { return }
         if providers.isEmpty {
             providers = [ProviderStatus.checking("cursor", "Cursor"), ProviderStatus.checking("anthropic", "Anthropic"), ProviderStatus.checking("openai", "OpenAI")]
@@ -431,7 +431,7 @@ enum QuickMenuSection: String, CaseIterable, Identifiable {
         let settings = providerSettings
         providerBusy = true
         Task.detached { [weak self] in
-            let statuses = await ProviderUsageService.collect(settings: settings)
+            let statuses = await ProviderUsageService.collect(settings: settings, cursorInteractive: interactive)
             await MainActor.run { [weak self] in
                 guard let self, generation == self.providerGeneration else { return }
                 self.providers = statuses

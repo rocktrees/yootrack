@@ -1,6 +1,15 @@
 import XCTest
 @testable import PowerWatchCore
 
+private final class CursorPasswordCalls: @unchecked Sendable {
+    var count = 0
+    var requests: [String] = []
+}
+
+private final class CursorAuthorization: @unchecked Sendable {
+    var value: String?
+}
+
 final class ProviderUsageTests: XCTestCase {
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
@@ -90,6 +99,55 @@ final class ProviderUsageTests: XCTestCase {
         XCTAssertEqual(parsed.month.input, 17)
         XCTAssertEqual(parsed.rates.map(\.label), ["5-hour session", "7-day"])
         XCTAssertEqual(parsed.rates[0].percentRemaining, 60)
+    }
+
+    func testPlainCursorSessionDoesNotReadKeychain() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("pw-plain-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let database = try database(in: folder, name: "plain.db", value: "plain-token")
+        let calls = CursorPasswordCalls()
+        let session = CursorAuth.session(database: database, interactive: false, password: { _ in calls.count += 1; return .unavailable })
+        XCTAssertEqual(session.token, "plain-token")
+        XCTAssertNil(session.error)
+        XCTAssertEqual(calls.count, 0)
+    }
+
+    func testEncryptedCursorSessionIsTheDashboardBearer() async throws {
+        let jwt = "eyJhbGciOiJub25lIn0.eyJzdWIiOiJhdXRoMHx1c2VyXzEifQ.sig"
+        let home = try cursorHome(token: Self.encryptedCursorSession)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let seen = CursorAuthorization()
+        let environment = ProviderEnvironment(now: { self.now }, home: home, secret: { _ in nil }, read: { _ in nil }, fetch: { request in
+            if request.url?.path.contains("GetCurrentPeriodUsage") == true {
+                seen.value = request.value(forHTTPHeaderField: "Authorization")
+                return .success(Data(#"{"planUsage":{"autoPercentUsed":40,"apiPercentUsed":50}}"#.utf8))
+            }
+            if request.url?.path.contains("GetPlanInfo") == true { return .success(Data(#"{"planInfo":{"planName":"Pro"}}"#.utf8)) }
+            return .failure(ProviderFetchError(status: 500, message: "unexpected"))
+        }, files: { _ in [] }, cursorPassword: { _ in .password("test-password") })
+        let statuses = await ProviderUsageService.collect(settings: ProviderSettings(), environment: environment)
+        let cursor = try XCTUnwrap(statuses.first { $0.id == "cursor" })
+        XCTAssertEqual(seen.value, "Bearer \(jwt)")
+        XCTAssertFalse(seen.value?.contains("cursor-safe-storage") == true)
+        XCTAssertNil(cursor.error)
+        XCTAssertEqual(cursor.source, "Cursor login")
+        XCTAssertEqual(cursor.windows.first { $0.id == "auto" }?.remaining, 60)
+    }
+
+    func testLockedOrMissingCursorKeychainIsNotSent() async throws {
+        let lockedHome = try cursorHome(token: Self.encryptedCursorSession)
+        let missingHome = try cursorHome(token: Self.encryptedCursorSession)
+        defer { try? FileManager.default.removeItem(at: lockedHome); try? FileManager.default.removeItem(at: missingHome) }
+        let lockedCalls = CursorPasswordCalls()
+        let locked = await cursorStatus(home: lockedHome, password: { _ in lockedCalls.count += 1; return .interactionRequired }, requests: lockedCalls)
+        XCTAssertEqual(locked.error, CursorAuth.lockedMessage)
+        XCTAssertEqual(lockedCalls.count, 1)
+        XCTAssertTrue(lockedCalls.requests.isEmpty)
+        let missingCalls = CursorPasswordCalls()
+        let missing = await cursorStatus(home: missingHome, password: { _ in missingCalls.count += 1; return .unavailable }, requests: missingCalls)
+        XCTAssertEqual(missing.error, CursorAuth.unreadableMessage)
+        XCTAssertTrue(missingCalls.requests.isEmpty)
     }
 
     func testCursorDatabaseReadsPlainAndQuotedTokens() throws {
@@ -182,6 +240,25 @@ final class ProviderUsageTests: XCTestCase {
         XCTAssertEqual(anthropic.source, "Claude login")
         XCTAssertEqual(anthropic.plan, "prepaid")
         XCTAssertEqual(anthropic.error, "This Claude login is an API organization, so Claude does not report a remaining plan window.")
+    }
+
+    private static let encryptedCursorSession = "cursor-safe-storage:v1:djEwWYhmSnp1q+qiTrBMIfHTGiaocfNxVB1uHnqJLpROHUtimC2iaVnbVtbJlMfkmoqNuWjN/bB4ymeZW2jGbmFTTw=="
+
+    private func cursorHome(token: String) throws -> URL {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("pw-cursor-\(UUID().uuidString)", isDirectory: true)
+        let folder = home.appendingPathComponent("Library/Application Support/Cursor/User/globalStorage", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        _ = try database(in: folder, name: "state.vscdb", value: token)
+        return home
+    }
+
+    private func cursorStatus(home: URL, password: @escaping @Sendable (Bool) -> CursorKeychainResult, requests: CursorPasswordCalls) async -> ProviderStatus {
+        let environment = ProviderEnvironment(now: { self.now }, home: home, secret: { _ in nil }, read: { _ in nil }, fetch: { request in
+            requests.requests.append(request.value(forHTTPHeaderField: "Authorization") ?? "")
+            return .failure(ProviderFetchError(status: 500, message: "should not send"))
+        }, files: { _ in [] }, cursorPassword: password)
+        let statuses = await ProviderUsageService.collect(settings: ProviderSettings(), environment: environment)
+        return statuses.first { $0.id == "cursor" }!
     }
 
     private func database(in folder: URL, name: String, value: String) throws -> URL {

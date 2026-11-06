@@ -14,7 +14,7 @@ The local logs can contain sensitive information. YooTrack reads them to extract
 
 ## Cursor
 
-YooTrack attempts to read the Cursor session token from Cursor’s local `state.vscdb` database. It uses that token to request the current-period usage and plan information from Cursor’s service. If the main response does not contain readable usage windows, it tries a legacy usage endpoint. An optional token saved in YooTrack’s Keychain service is used as a fallback.
+YooTrack attempts to read the Cursor session token from Cursor’s local `state.vscdb` database. Current Cursor builds store that token as `cursor-safe-storage:v1:` ciphertext. YooTrack decrypts it with the existing Keychain item **Cursor Safe Storage** (account **Cursor Key**) and does not save the decrypted session. A timer refresh stays silent. Refresh and the weekly chart can ask once for Keychain access. The token requests the current-period usage and plan information from Cursor’s service. If the main response does not contain readable usage windows, it tries a legacy usage endpoint. An optional token saved in YooTrack’s Keychain service is used as a fallback.
 
 The menu’s **Show weekly usage** control loads Cursor dashboard usage events for the selected Sunday–Saturday week. Bars group tokens (input, output, cache read, and cache write) or event cost by model; hover over a bar segment to see its model and value. The same view is available in Cursor’s detail page. Event cost is not necessarily an extra charge beyond the subscription. Missing values are flagged as incomplete. This uses an undocumented Cursor dashboard endpoint that may change, and sends the existing Cursor session to cursor.com only when the chart is opened or the week changes.
 
